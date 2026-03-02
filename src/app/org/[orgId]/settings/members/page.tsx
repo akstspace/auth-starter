@@ -67,8 +67,9 @@ export default function MembersPage() {
                     ? (iData as { invitations: unknown[] }).invitations
                     : []
             setInvitations(invList as Invitation[])
-        } catch {
-            // silent
+        } catch (err) {
+            console.error("Failed to load members/invitations:", err)
+            setError(err instanceof Error ? err.message : "Failed to load members and invitations.")
         } finally {
             setLoading(false)
         }
@@ -103,10 +104,14 @@ export default function MembersPage() {
 
     const handleRemoveMember = async (memberId: string) => {
         try {
-            await authClient.organization.removeMember({
+            const { error: err } = await authClient.organization.removeMember({
                 memberIdOrEmail: memberId,
                 organizationId: orgId,
             })
+            if (err) {
+                setError(err.message || "Failed to remove member.")
+                return
+            }
             fetchData()
         } catch {
             setError("Failed to remove member.")
@@ -115,7 +120,11 @@ export default function MembersPage() {
 
     const handleCancelInvitation = async (invitationId: string) => {
         try {
-            await authClient.organization.cancelInvitation({ invitationId })
+            const { error: err } = await authClient.organization.cancelInvitation({ invitationId })
+            if (err) {
+                setError(err.message || "Failed to cancel invitation.")
+                return
+            }
             fetchData()
         } catch {
             setError("Failed to cancel invitation.")
@@ -124,11 +133,15 @@ export default function MembersPage() {
 
     const handleRoleChange = async (memberId: string, newRole: string) => {
         try {
-            await authClient.organization.updateMemberRole({
+            const { error: err } = await authClient.organization.updateMemberRole({
                 memberId,
                 role: newRole as "member" | "admin" | "owner",
                 organizationId: orgId,
             })
+            if (err) {
+                setError(err.message || "Failed to update role.")
+                return
+            }
             fetchData()
         } catch {
             setError("Failed to update role.")

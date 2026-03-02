@@ -13,7 +13,11 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
     const orgId = params.orgId as string
 
     const handleSignOut = async () => {
-        await authClient.signOut()
+        const { error } = await authClient.signOut()
+        if (error) {
+            console.error("Sign out failed:", error)
+            return
+        }
         window.location.href = "/login"
     }
 
@@ -35,6 +39,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
                             <Link
                                 href={`/org/${orgId}/settings/passkeys`}
                                 className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                                aria-label="Settings"
                             >
                                 <Settings className="size-4" />
                                 <span className="hidden sm:inline">Settings</span>
@@ -43,6 +48,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
                                 onClick={handleSignOut}
                                 className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                                 title="Sign out"
+                                aria-label="Sign out"
                             >
                                 <LogOut className="size-4" />
                                 <span className="hidden sm:inline">Sign out</span>

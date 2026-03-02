@@ -32,8 +32,9 @@ export default function HomePage() {
         } else {
           router.replace("/onboarding")
         }
-      } catch {
-        // silent
+      } catch (err) {
+        console.error("Failed to resolve organization:", err)
+        router.replace("/onboarding")
       }
     }
 

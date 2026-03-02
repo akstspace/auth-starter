@@ -72,7 +72,11 @@ export default function OrganizationsPage() {
     const handleDelete = async (orgId: string) => {
         if (!confirm("Are you sure? This will delete the organization and remove all members.")) return
         try {
-            await authClient.organization.delete({ organizationId: orgId })
+            const { error: err } = await authClient.organization.delete({ organizationId: orgId })
+            if (err) {
+                setError(err.message || "Failed to delete organization.")
+                return
+            }
             if (orgId === currentOrgId) {
                 router.push("/")
             } else {
@@ -158,10 +162,10 @@ export default function OrganizationsPage() {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => handleUpdate(org.id)} className="text-emerald-500 hover:text-emerald-400 transition-colors" title="Save">
+                                    <button onClick={() => handleUpdate(org.id)} className="text-emerald-500 hover:text-emerald-400 transition-colors" title="Save" aria-label="Save organization">
                                         <Check className="size-4" />
                                     </button>
-                                    <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground transition-colors" title="Cancel">
+                                    <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground transition-colors" title="Cancel" aria-label="Cancel editing">
                                         <X className="size-4" />
                                     </button>
                                 </div>
@@ -187,10 +191,10 @@ export default function OrganizationsPage() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <button onClick={() => startEdit(org)} className="text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                                    <button onClick={() => startEdit(org)} className="text-muted-foreground hover:text-foreground transition-colors" title="Edit" aria-label="Edit organization">
                                         <Pencil className="size-3.5" />
                                     </button>
-                                    <button onClick={() => handleDelete(org.id)} className="text-muted-foreground hover:text-red-500 transition-colors" title="Delete">
+                                    <button onClick={() => handleDelete(org.id)} className="text-muted-foreground hover:text-red-500 transition-colors" title="Delete" aria-label="Delete organization">
                                         <Trash2 className="size-3.5" />
                                     </button>
                                 </div>

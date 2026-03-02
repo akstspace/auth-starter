@@ -186,7 +186,7 @@ export default function PasskeysSettingsPage() {
                                         <Button size="sm" type="submit" disabled={actionLoading}>
                                             Save
                                         </Button>
-                                        <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>
+                                        <Button size="sm" variant="outline" type="button" onClick={() => setEditingId(null)}>
                                             Cancel
                                         </Button>
                                     </form>

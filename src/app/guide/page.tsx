@@ -457,10 +457,11 @@ export default function GuidePage() {
                     <FadeIn delay={0.1}>
                         <div className="rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm overflow-hidden">
                             {/* Tab bar */}
-                            <div className="flex items-center gap-1 border-b border-border/50 px-4 pt-3">
+                            <div className="flex items-center gap-1 border-b border-border/50 px-4 pt-3" role="tablist">
                                 {tabs.map((tab) => (
                                     <button
                                         key={tab.id}
+                                        id={`tab-${tab.id}`}
                                         role="tab"
                                         aria-selected={activeTab === tab.id}
                                         aria-controls={`panel-${tab.id}`}
@@ -495,7 +496,7 @@ export default function GuidePage() {
                             </div>
 
                             {/* Code with syntax highlighting */}
-                            <div className="max-h-[480px] overflow-y-auto">
+                            <div id={`panel-${activeTab}`} role="tabpanel" aria-labelledby={`tab-${activeTab}`} className="max-h-[480px] overflow-y-auto">
                                 <pre className="p-5 text-sm font-mono leading-relaxed">
                                     <code>{highlightCode(current.code, current.lang)}</code>
                                 </pre>

@@ -43,13 +43,18 @@ export async function sendEmail(opts: EmailOptions): Promise<void> {
         return;
     }
 
-    const info = await transporter.sendMail({
-        from: opts.from ?? DEFAULT_FROM,
-        to: opts.to,
-        subject: opts.subject,
-        html: opts.html,
-        text: opts.text,
-    });
+    try {
+        const info = await transporter.sendMail({
+            from: opts.from ?? DEFAULT_FROM,
+            to: opts.to,
+            subject: opts.subject,
+            html: opts.html,
+            text: opts.text,
+        });
 
-    console.log(`📧 Email sent → ${opts.to} (messageId: ${info.messageId})`);
+        console.log(`📧 Email sent → ${opts.to} (messageId: ${info.messageId})`);
+    } catch (error) {
+        console.error(`❌ Failed to send email to ${opts.to}:`, error);
+        throw error;
+    }
 }

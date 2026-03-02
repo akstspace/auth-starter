@@ -49,9 +49,17 @@ export function OrgSwitcher() {
     const activeOrg = orgs.find((o) => o.id === currentOrgId)
 
     const switchOrg = async (orgId: string) => {
-        await authClient.organization.setActive({ organizationId: orgId })
-        setOpen(false)
-        router.push(`/org/${orgId}`)
+        try {
+            const { error } = await authClient.organization.setActive({ organizationId: orgId })
+            if (error) {
+                console.error("Failed to switch organization:", error)
+                return
+            }
+            setOpen(false)
+            router.push(`/org/${orgId}`)
+        } catch (err) {
+            console.error("Failed to switch organization:", err)
+        }
     }
 
     if (loading) {
