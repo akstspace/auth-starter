@@ -10,4 +10,7 @@ cp .devcontainer/dotfiles/.p10k.zsh ~
 cp .devcontainer/dotfiles/.profile ~
 cp .devcontainer/dotfiles/.zprofile ~
 
+sudo sh < <(curl -sL https://raw.githubusercontent.com/axllent/mailpit/develop/install.sh)
+volta install node
+
 echo "✓ Post-create setup complete!"
