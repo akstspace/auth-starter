@@ -32,13 +32,20 @@ const transporter = isConfigured
 const DEFAULT_FROM =
     process.env.EMAIL_FROM || "Auth UI <noreply@localhost>";
 
+function maskEmail(email: string): string {
+    const [local, domain] = email.split("@");
+    if (!domain) return "***";
+    const masked = local.length <= 2 ? "*".repeat(local.length) : local[0] + "*".repeat(local.length - 2) + local[local.length - 1];
+    return `${masked}@${domain}`;
+}
+
 export async function sendEmail(opts: EmailOptions): Promise<void> {
     if (!transporter) {
         console.log(
             `\n⚠️  Email not configured (set SMTP_HOST to enable)\n` +
-            `   To: ${opts.to}\n` +
-            `   Subject: ${opts.subject}\n` +
-            `   ${opts.text || "(HTML body)"}\n`
+            `   To: ${maskEmail(opts.to)}\n` +
+            `   Subject: [REDACTED]\n` +
+            `   Body: [REDACTED]\n`
         );
         return;
     }
@@ -52,9 +59,9 @@ export async function sendEmail(opts: EmailOptions): Promise<void> {
             text: opts.text,
         });
 
-        console.log(`📧 Email sent → ${opts.to} (messageId: ${info.messageId})`);
+        console.log(`📧 Email sent → ${maskEmail(opts.to)} (messageId: ${info.messageId})`);
     } catch (error) {
-        console.error(`❌ Failed to send email to ${opts.to}:`, error);
+        console.error(`❌ Failed to send email to ${maskEmail(opts.to)}:`, error);
         throw error;
     }
 }

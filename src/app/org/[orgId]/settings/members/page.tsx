@@ -85,7 +85,7 @@ export default function MembersPage() {
         try {
             const { error: err } = await authClient.organization.inviteMember({
                 email: inviteEmail,
-                role: inviteRole as "member" | "admin" | "owner",
+                role: inviteRole as "member" | "admin",
                 organizationId: orgId,
             })
             if (err) {
@@ -135,7 +135,7 @@ export default function MembersPage() {
         try {
             const { error: err } = await authClient.organization.updateMemberRole({
                 memberId,
-                role: newRole as "member" | "admin" | "owner",
+                role: newRole as "member" | "admin",
                 organizationId: orgId,
             })
             if (err) {

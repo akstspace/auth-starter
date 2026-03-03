@@ -21,12 +21,21 @@ export function OrgSwitcher() {
     const ref = useRef<HTMLDivElement>(null)
     const currentOrgId = params.orgId as string | undefined
 
+    const [fetchError, setFetchError] = useState(false)
+
     const fetchOrgs = useCallback(async () => {
         try {
-            const { data } = await authClient.organization.list()
+            const { data, error } = await authClient.organization.list()
+            if (error) {
+                console.error("Failed to load organizations:", error)
+                setFetchError(true)
+                return
+            }
             if (data) setOrgs(data as unknown as Organization[])
-        } catch {
-            // silent
+            setFetchError(false)
+        } catch (err) {
+            console.error("Failed to load organizations:", err)
+            setFetchError(true)
         } finally {
             setLoading(false)
         }
@@ -67,6 +76,15 @@ export function OrgSwitcher() {
             <div className="flex items-center gap-1.5 px-2 py-1">
                 <div className="size-5 rounded bg-muted animate-pulse" />
                 <div className="h-4 w-16 rounded bg-muted animate-pulse hidden sm:block" />
+            </div>
+        )
+    }
+
+    if (fetchError) {
+        return (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-red-500">
+                <Building2 className="size-3.5" />
+                <span className="hidden sm:inline">Failed to load</span>
             </div>
         )
     }
