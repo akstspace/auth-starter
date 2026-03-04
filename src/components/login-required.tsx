@@ -14,8 +14,12 @@ export function LoginRequired({ children }: { children: React.ReactNode }) {
     const router = useRouter()
 
     useEffect(() => {
-        if (!isPending && !session?.user) {
-            router.replace("/login")
+        if (!isPending) {
+            if (!session?.user) {
+                router.replace("/login")
+            } else if (!session.user.emailVerified) {
+                router.replace(`/verify-email?email=${encodeURIComponent(session.user.email)}`)
+            }
         }
     }, [isPending, session, router])
 

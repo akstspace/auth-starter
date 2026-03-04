@@ -53,7 +53,7 @@ See [`.env.example`](.env.example) for all required variables:
 For testing email features locally, start Mailpit (a local SMTP server and web UI):
 
 ```bash
-/usr/local/bin/mailpit -d /tmp/mailpit.db
+mailpit -d /tmp/mailpit.db
 ```
 
 This starts Mailpit with a persistent database. Access the web UI at `http://localhost:8025` to view all emails sent during development.

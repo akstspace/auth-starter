@@ -56,12 +56,29 @@ async function handler(request: NextRequest, { params }: { params: Promise<{ pat
     // Get a JWT from better-auth for the current session
     let token: string
     try {
+      // First fetch the session to check if email is verified
+      const sessionResult = await auth.api.getSession({
+        headers: await headers(),
+      })
+      if (!sessionResult?.user) {
+        return NextResponse.json(
+          { error: 'Authentication required' },
+          { status: 401 }
+        )
+      }
+      if (!sessionResult.user.emailVerified) {
+        return NextResponse.json(
+          { error: 'Email verification required' },
+          { status: 403 }
+        )
+      }
+
       const result = await auth.api.getToken({
         headers: await headers(),
       })
       if (!result?.token) {
         return NextResponse.json(
-          { error: 'Authentication required' },
+          { error: 'Token required' },
           { status: 401 }
         )
       }
