@@ -5,10 +5,19 @@ import Link from "next/link"
 import { motion } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
-import { UserPlus } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { UserPlus, ChevronDown } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export default function SignUpPage() {
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const router = useRouter()
 
   const handleGoogleSignIn = async () => {
     setError("")
@@ -19,6 +28,35 @@ export default function SignUpPage() {
       }
     } catch {
       setError("An unexpected error occurred.")
+    }
+  }
+
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setEmailLoading(true)
+    setError("")
+
+    try {
+      const { error, data } = await authClient.signUp.email(
+        {
+          email,
+          password,
+          name: `${firstName} ${lastName}`.trim(),
+          callbackURL: "/email-verified",
+        },
+        {
+          onSuccess(context) {
+            router.push(`/verify-email?email=${encodeURIComponent(email)}`)
+          }
+        }
+      )
+      if (error) {
+        setError(error.message || "Failed to create account.")
+      }
+    } catch {
+      setError("An unexpected error occurred.")
+    } finally {
+      setEmailLoading(false)
     }
   }
 
@@ -63,6 +101,81 @@ export default function SignUpPage() {
           </svg>
           Continue with Google
         </Button>
+
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => setShowPasswordForm(!showPasswordForm)}
+            aria-expanded={showPasswordForm}
+            aria-controls="signupPasswordFormPanel"
+            className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span>Or create account with email and password</span>
+            <ChevronDown className={`size-3 transition-transform ${showPasswordForm ? "rotate-180" : ""}`} />
+          </button>
+
+          {showPasswordForm && (
+            <motion.form
+              id="signupPasswordFormPanel"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              className="mt-4 space-y-3 overflow-hidden"
+              onSubmit={handleEmailSignUp}
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  id="signup-first-name"
+                  type="text"
+                  placeholder="First name"
+                  aria-label="First name"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  disabled={emailLoading}
+                />
+                <Input
+                  id="signup-last-name"
+                  type="text"
+                  placeholder="Last name"
+                  aria-label="Last name"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  disabled={emailLoading}
+                />
+              </div>
+              <Input
+                id="signup-email"
+                type="email"
+                placeholder="Email address"
+                aria-label="Email address"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={emailLoading}
+              />
+              <Input
+                id="signup-password"
+                type="password"
+                placeholder="Password (min 8 chars)"
+                aria-label="Password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={emailLoading}
+              />
+              <Button
+                type="submit"
+                variant="secondary"
+                className="w-full text-sm mt-2"
+                disabled={emailLoading}
+              >
+                {emailLoading ? "Creating account..." : "Sign up with Password"}
+              </Button>
+            </motion.form>
+          )}
+        </div>
 
         {/* Footer link */}
         <p className="mt-6 text-center text-sm text-muted-foreground">

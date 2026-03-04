@@ -1,17 +1,42 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
-import { Lock, Fingerprint } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Lock, Fingerprint, ChevronDown } from "lucide-react"
 
-export default function LoginPage() {
+function LoginContent() {
   const [passkeyLoading, setPasskeyLoading] = useState(false)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [lastMethod, setLastMethod] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState("")
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const method = authClient.getLastUsedLoginMethod()
+    if (method) {
+      setLastMethod(method)
+      // Auto-expand password form if last login was email
+      if (method === "email") {
+        setShowPasswordForm(true)
+      }
+    }
+
+    const message = searchParams.get("message")
+    if (message === "password_reset") {
+      setSuccessMessage("Password reset successfully. Sign in with your new password.")
+      setShowPasswordForm(true)
+    }
+  }, [searchParams])
 
   const handleGoogleSignIn = async () => {
     setError("")
@@ -47,6 +72,40 @@ export default function LoginPage() {
     }
   }
 
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setEmailLoading(true)
+    setError("")
+
+    try {
+      const { error, data } = await authClient.signIn.email(
+        { email, password },
+        {
+          onSuccess(context) {
+            if (context.data.twoFactorRedirect) {
+              router.push("/2fa")
+            } else {
+              router.push("/")
+            }
+          }
+        }
+      )
+      if (error) {
+        setError(error.message || "Invalid email or password.")
+      }
+    } catch {
+      setError("An unexpected error occurred.")
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
+  const LastUsedBadge = () => (
+    <span className="text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+      Last used
+    </span>
+  )
+
   return (
     <div className="min-h-dvh bg-background text-foreground flex items-center justify-center p-4">
       <motion.div
@@ -67,6 +126,12 @@ export default function LoginPage() {
             Sign in to your account to continue
           </p>
         </div>
+
+        {successMessage && (
+          <div role="status" className="text-sm text-emerald-500 text-center py-2 px-3 mb-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            {successMessage}
+          </div>
+        )}
 
         {error && (
           <div role="alert" className="text-sm text-red-500 dark:text-red-400 text-center py-1 mb-4">
@@ -89,18 +154,78 @@ export default function LoginPage() {
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
             </svg>
             Continue with Google
+            {lastMethod === "google" && <LastUsedBadge />}
           </Button>
 
           <Button
             type="button"
             variant="outline"
             onClick={handlePasskeySignIn}
-            disabled={passkeyLoading}
+            disabled={passkeyLoading || emailLoading}
             className="w-full gap-2 border-border/50"
           >
             <Fingerprint className="size-4" />
             {passkeyLoading ? "Authenticating…" : "Sign in with Passkey"}
+            {lastMethod === "passkey" && <LastUsedBadge />}
           </Button>
+        </div>
+
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => setShowPasswordForm(!showPasswordForm)}
+            aria-expanded={showPasswordForm}
+            aria-controls="loginPasswordFormPanel"
+            className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span>Or use email and password</span>
+            {lastMethod === "email" && <LastUsedBadge />}
+            <ChevronDown className={`size-3 transition-transform ${showPasswordForm ? "rotate-180" : ""}`} />
+          </button>
+
+          {showPasswordForm && (
+            <motion.form
+              id="loginPasswordFormPanel"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              className="mt-4 space-y-3 overflow-hidden"
+              onSubmit={handleEmailSignIn}
+            >
+              <Input
+                id="login-email"
+                type="email"
+                placeholder="Email address"
+                aria-label="Email address"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={emailLoading}
+              />
+              <Input
+                id="login-password"
+                type="password"
+                placeholder="Password"
+                aria-label="Password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={emailLoading}
+              />
+              <div className="flex items-center space-between mt-2">
+                <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground hover:underline ml-auto">
+                  Forgot password?
+                </Link>
+              </div>
+              <Button
+                type="submit"
+                variant="secondary"
+                className="w-full text-sm"
+                disabled={emailLoading}
+              >
+                {emailLoading ? "Signing in..." : "Sign in with Password"}
+              </Button>
+            </motion.form>
+          )}
         </div>
 
         {/* Footer link */}
@@ -112,5 +237,13 @@ export default function LoginPage() {
         </p>
       </motion.div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   )
 }

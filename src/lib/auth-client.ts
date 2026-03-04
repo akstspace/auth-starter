@@ -4,7 +4,7 @@ import { createAuthClient } from "better-auth/react";
 import { jwtClient } from "better-auth/client/plugins";
 import { organizationClient } from "better-auth/client/plugins";
 import { passkeyClient } from "@better-auth/passkey/client";
-import { lastLoginMethodClient } from "better-auth/client/plugins";
+import { lastLoginMethodClient, twoFactorClient } from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
   baseURL:
@@ -14,6 +14,11 @@ export const authClient = createAuthClient({
     organizationClient(),
     passkeyClient(),
     lastLoginMethodClient(),
+    twoFactorClient({
+      onTwoFactorRedirect() {
+        window.location.href = "/2fa";
+      },
+    }),
   ],
   fetchOptions: {
     onError: async (ctx) => {

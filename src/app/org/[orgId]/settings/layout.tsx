@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
 import { motion } from "motion/react"
-import { Users, Building2, Fingerprint } from "lucide-react"
+import { Users, Building2, Fingerprint, User, Shield } from "lucide-react"
 
 const getOrgNavItems = (orgId: string) => [
     { href: `/org/${orgId}/settings/members`, label: "Members", icon: Users },
@@ -11,7 +11,9 @@ const getOrgNavItems = (orgId: string) => [
 ]
 
 const getAccountNavItems = (orgId: string) => [
+    { href: `/org/${orgId}/settings/profile`, label: "Profile", icon: User },
     { href: `/org/${orgId}/settings/passkeys`, label: "Passkeys", icon: Fingerprint },
+    { href: `/org/${orgId}/settings/security`, label: "Security", icon: Shield },
 ]
 
 export default function OrgSettingsLayout({ children }: { children: React.ReactNode }) {
