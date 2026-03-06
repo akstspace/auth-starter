@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { BookOpen, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
 export default function HomePage() {
   const { data: session, isPending } = authClient.useSession()
@@ -18,7 +19,7 @@ export default function HomePage() {
     // Check for active org in session
     const activeOrgId = (session.session as Record<string, unknown>).activeOrganizationId as string | undefined
     if (activeOrgId) {
-      router.replace(`/org/${activeOrgId}`)
+      router.replace("/org")
       return
     }
 
@@ -28,12 +29,15 @@ export default function HomePage() {
         const { data } = await authClient.organization.list()
         if (data && data.length > 0) {
           await authClient.organization.setActive({ organizationId: data[0].id })
-          router.replace(`/org/${data[0].id}`)
+          router.replace("/org")
         } else {
           router.replace("/onboarding")
         }
       } catch (err) {
-        console.error("Failed to resolve organization:", err)
+        console.log(
+          "Failed to resolve organization:",
+          getAuthErrorMessage(err, "Could not load organization state."),
+        )
         router.replace("/onboarding")
       }
     }

@@ -7,6 +7,8 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Building2, Loader2, Check, X } from "lucide-react"
 import Link from "next/link"
+import { getAuthErrorMessage } from "@/lib/auth-error"
+import { withAuthFlow } from "@/lib/auth-flow"
 
 export default function AcceptInvitationPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: invitationId } = use(params)
@@ -31,16 +33,18 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
             try {
                 const { data: session } = await authClient.getSession()
                 if (!session) {
-                    // Not logged in — redirect to login with return URL
-                    window.location.href = `/login?callbackUrl=${encodeURIComponent(`/accept-invitation/${invitationId}`)}`
+                    window.location.href = withAuthFlow("/login", {
+                        callbackUrl: `/accept-invitation/${invitationId}`,
+                        invitationId,
+                    })
                     return
                 }
 
-                const { data, error: err } = await authClient.organization.getInvitation({
+                const { data, error: requestError } = await authClient.organization.getInvitation({
                     query: { id: invitationId },
                 })
-                if (err || !data) {
-                    setError("Invitation not found or has expired.")
+                if (requestError || !data) {
+                    setError(getAuthErrorMessage(requestError, "Invitation not found or has expired."))
                 } else {
                     setInvitation({
                         id: data.id,
@@ -51,8 +55,8 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
                         inviterEmail: (data as Record<string, unknown>).inviterEmail as string || "",
                     })
                 }
-            } catch {
-                setError("Failed to load invitation.")
+            } catch (err) {
+                setError(getAuthErrorMessage(err, "Failed to load invitation."))
             } finally {
                 setLoading(false)
             }
@@ -64,17 +68,33 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
         setAccepting(true)
         setError("")
         try {
-            const { error: err } = await authClient.organization.acceptInvitation({
+            const { error: requestError } = await authClient.organization.acceptInvitation({
                 invitationId,
             })
-            if (err) {
-                setError(err.message || "Failed to accept invitation.")
+            if (requestError) {
+                const errorCode = (requestError as { code?: string }).code
+                if (
+                    errorCode ===
+                    "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION"
+                ) {
+                    const email = invitation?.email ?? ""
+                    router.push(
+                        withAuthFlow(
+                            `/verify-email?email=${encodeURIComponent(email)}&callbackUrl=${encodeURIComponent(
+                                `/accept-invitation/${invitationId}`,
+                            )}`,
+                            { invitationId },
+                        ),
+                    )
+                    return
+                }
+                setError(getAuthErrorMessage(requestError, "Failed to accept invitation."))
             } else {
                 setSuccess(true)
-                setTimeout(() => router.push("/"), 2000)
+                setTimeout(() => router.push("/org"), 2000)
             }
-        } catch {
-            setError("An unexpected error occurred.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setAccepting(false)
         }
@@ -84,16 +104,32 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
         setRejecting(true)
         setError("")
         try {
-            const { error: err } = await authClient.organization.rejectInvitation({
+            const { error: requestError } = await authClient.organization.rejectInvitation({
                 invitationId,
             })
-            if (err) {
-                setError(err.message || "Failed to reject invitation.")
+            if (requestError) {
+                const errorCode = (requestError as { code?: string }).code
+                if (
+                    errorCode ===
+                    "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION"
+                ) {
+                    const email = invitation?.email ?? ""
+                    router.push(
+                        withAuthFlow(
+                            `/verify-email?email=${encodeURIComponent(email)}&callbackUrl=${encodeURIComponent(
+                                `/accept-invitation/${invitationId}`,
+                            )}`,
+                            { invitationId },
+                        ),
+                    )
+                    return
+                }
+                setError(getAuthErrorMessage(requestError, "Failed to reject invitation."))
             } else {
                 setRejected(true)
             }
-        } catch {
-            setError("An unexpected error occurred.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setRejecting(false)
         }
@@ -135,7 +171,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
                             <p className="text-sm text-muted-foreground text-pretty">
                                 You&apos;ve declined the invitation to {invitation?.organizationName}.
                             </p>
-                            <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                            <Link href="/org" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                                 Go to dashboard →
                             </Link>
                         </div>
@@ -146,7 +182,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
                             </div>
                             <h2 className="text-lg font-bold text-foreground">Invalid invitation</h2>
                             <p className="text-sm text-muted-foreground text-pretty">{error}</p>
-                            <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                            <Link href="/org" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                                 Go to dashboard →
                             </Link>
                         </div>

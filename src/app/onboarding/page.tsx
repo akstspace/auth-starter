@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Building2 } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
 export default function OnboardingPage() {
     const [name, setName] = useState("")
@@ -22,15 +23,21 @@ export default function OnboardingPage() {
             const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
             const { data, error: err } = await authClient.organization.create({ name, slug })
             if (err) {
-                setError(err.message || "Failed to create organization.")
+                setError(getAuthErrorMessage(err, "Failed to create organization."))
                 return
             }
             if (data) {
-                await authClient.organization.setActive({ organizationId: data.id })
-                router.replace(`/org/${data.id}`)
+                const { error: setActiveError } = await authClient.organization.setActive({
+                    organizationId: data.id,
+                })
+                if (setActiveError) {
+                    setError(getAuthErrorMessage(setActiveError, "Failed to activate organization."))
+                    return
+                }
+                router.replace("/org")
             }
-        } catch {
-            setError("An unexpected error occurred.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setLoading(false)
         }

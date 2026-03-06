@@ -1,7 +1,12 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/db";
-import { jwt, organization, lastLoginMethod, twoFactor } from "better-auth/plugins";
+import {
+  jwt,
+  lastLoginMethod,
+  organization,
+  twoFactor,
+} from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { sendInvitationEmail, sendVerificationEmail, sendPasswordResetEmail, send2FAEmail } from "@/lib/email";
 
@@ -44,6 +49,11 @@ export const auth = betterAuth({
     organization({
       allowUserToCreateOrganization: true,
       sendInvitationEmail,
+      teams: {
+        enabled: true,
+        maximumTeams: 25,
+        maximumMembersPerTeam: 100,
+      },
     }),
 
     passkey(),
