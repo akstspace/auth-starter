@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { KeyRound } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("")
@@ -27,12 +28,12 @@ export default function ForgotPasswordPage() {
             })
 
             if (error) {
-                setError(error.message || "Failed to send reset link.")
+                setError(getAuthErrorMessage(error, "Failed to send reset link."))
             } else {
                 setMessage("If an account with that email exists, we've sent a password reset link.")
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An unexpected error occurred.")
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setLoading(false)
         }

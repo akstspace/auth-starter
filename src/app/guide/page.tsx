@@ -174,7 +174,7 @@ const customizePrompt = `I cloned the auth-ui-boilerplate. Strip all demo/boiler
    - src/app/api/auth/[...all]/route.ts (auth API handler)
    - src/app/api/[...path]/route.ts (JWT-injecting API proxy)
    - src/app/login/page.tsx and src/app/signup/page.tsx (auth pages — except the Back button removal above)
-   - src/app/accept-invitation/, src/app/onboarding/, and src/app/org/ (organization and onboarding flows)
+   - src/app/accept-invitation/, src/app/onboarding/, src/app/org/, and src/app/settings/ (organization and onboarding flows)
    - src/db/ (Drizzle schema and migrations)
    - src/components/ui/ (shadcn/ui primitives)
    - src/components/theme-provider.tsx and src/components/theme-toggle.tsx
@@ -579,7 +579,7 @@ export default function GuidePage() {
 │   ├── api/[...path]/       # JWT-injecting API proxy
 │   ├── login/               # Sign-in page
 │   ├── signup/              # Sign-up page
-│   ├── org/[orgId]/         # Org-scoped dashboard & settings
+│   ├── org/                 # Active-org dashboard
 │   ├── settings/            # User settings (2FA, passkeys)
 │   └── guide/               # This page
 ├── components/

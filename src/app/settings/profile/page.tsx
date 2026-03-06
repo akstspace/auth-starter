@@ -5,6 +5,7 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { User } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
 export default function ProfileSettingsPage() {
     const { data: session } = authClient.useSession()
@@ -41,12 +42,12 @@ export default function ProfileSettingsPage() {
             })
 
             if (error) {
-                setError(error.message || "Failed to update profile.")
+                setError(getAuthErrorMessage(error, "Failed to update profile."))
             } else {
                 setMessage("Profile updated successfully.")
             }
-        } catch {
-            setError("An unexpected error occurred.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setLoading(false)
         }

@@ -1,20 +1,26 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ShieldCheck } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
+import { getAuthFlowParams, resolveCallbackUrl } from "@/lib/auth-flow"
 
-export default function TwoFactorPage() {
+function TwoFactorContent() {
     const [code, setCode] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [mode, setMode] = useState<"totp" | "backup">("totp")
     const [trustDevice, setTrustDevice] = useState(false)
     const router = useRouter()
+    const searchParams = useSearchParams()
+
+    const flow = getAuthFlowParams(searchParams)
+    const callbackTarget = resolveCallbackUrl(flow)
 
     const handleVerifyTotp = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -22,18 +28,18 @@ export default function TwoFactorPage() {
         setError("")
 
         try {
-            const { error } = await authClient.twoFactor.verifyTotp({
+            const { error: requestError } = await authClient.twoFactor.verifyTotp({
                 code,
                 trustDevice,
             })
 
-            if (error) {
-                setError(error.message || "Invalid code. Please try again.")
+            if (requestError) {
+                setError(getAuthErrorMessage(requestError, "Invalid code. Please try again."))
             } else {
-                router.push("/")
+                router.push(callbackTarget)
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Verification failed. Please try again.")
+            setError(getAuthErrorMessage(err, "Verification failed. Please try again."))
         } finally {
             setLoading(false)
         }
@@ -45,18 +51,18 @@ export default function TwoFactorPage() {
         setError("")
 
         try {
-            const { error } = await authClient.twoFactor.verifyBackupCode({
+            const { error: requestError } = await authClient.twoFactor.verifyBackupCode({
                 code,
                 trustDevice,
             })
 
-            if (error) {
-                setError(error.message || "Invalid backup code.")
+            if (requestError) {
+                setError(getAuthErrorMessage(requestError, "Invalid backup code."))
             } else {
-                router.push("/")
+                router.push(callbackTarget)
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Verification failed. Please try again.")
+            setError(getAuthErrorMessage(err, "Verification failed. Please try again."))
         } finally {
             setLoading(false)
         }
@@ -135,5 +141,13 @@ export default function TwoFactorPage() {
                 </button>
             </motion.div>
         </div>
+    )
+}
+
+export default function TwoFactorPage() {
+    return (
+        <Suspense fallback={null}>
+            <TwoFactorContent />
+        </Suspense>
     )
 }

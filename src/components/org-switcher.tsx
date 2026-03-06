@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { Building2, ChevronDown, Plus, Check } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
 interface Organization {
     id: string
@@ -16,10 +17,10 @@ export function OrgSwitcher() {
     const [orgs, setOrgs] = useState<Organization[]>([])
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(true)
-    const params = useParams()
     const router = useRouter()
     const ref = useRef<HTMLDivElement>(null)
-    const currentOrgId = params.orgId as string | undefined
+    const { data: activeOrgFromSession } = authClient.useActiveOrganization()
+    const currentOrgId = activeOrgFromSession?.id
 
     const [fetchError, setFetchError] = useState(false)
 
@@ -27,14 +28,14 @@ export function OrgSwitcher() {
         try {
             const { data, error } = await authClient.organization.list()
             if (error) {
-                console.error("Failed to load organizations:", error)
+                console.log("Failed to load organizations:", error)
                 setFetchError(true)
                 return
             }
             if (data) setOrgs(data as unknown as Organization[])
             setFetchError(false)
         } catch (err) {
-            console.error("Failed to load organizations:", err)
+            console.log("Failed to load organizations:", err)
             setFetchError(true)
         } finally {
             setLoading(false)
@@ -61,13 +62,19 @@ export function OrgSwitcher() {
         try {
             const { error } = await authClient.organization.setActive({ organizationId: orgId })
             if (error) {
-                console.error("Failed to switch organization:", error)
+                console.log(
+                    "Failed to switch organization:",
+                    getAuthErrorMessage(error, "Could not switch organization."),
+                )
                 return
             }
             setOpen(false)
-            router.push(`/org/${orgId}`)
+            router.push("/org")
         } catch (err) {
-            console.error("Failed to switch organization:", err)
+            console.log(
+                "Failed to switch organization:",
+                getAuthErrorMessage(err, "Could not switch organization."),
+            )
         }
     }
 
@@ -92,7 +99,7 @@ export function OrgSwitcher() {
     if (orgs.length === 0) {
         return (
             <button
-                onClick={() => router.push(`/org/${currentOrgId || "new"}/settings/organizations`)}
+                onClick={() => router.push("/settings/organizations")}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
             >
                 <Plus className="size-3.5" />
@@ -147,7 +154,7 @@ export function OrgSwitcher() {
                     </div>
                     <div className="border-t border-border/40 py-1">
                         <button
-                            onClick={() => { setOpen(false); router.push(`/org/${currentOrgId}/settings/organizations`) }}
+                            onClick={() => { setOpen(false); router.push("/settings/organizations") }}
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
                         >
                             <Plus className="size-3.5" />

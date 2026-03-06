@@ -10,6 +10,7 @@ import { LockKeyhole, XCircle } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
 function ResetPasswordContent() {
     const [password, setPassword] = useState("")
@@ -61,12 +62,12 @@ function ResetPasswordContent() {
             })
 
             if (error) {
-                setError(error.message || "Failed to reset password.")
+                setError(getAuthErrorMessage(error, "Failed to reset password."))
             } else {
                 router.push("/login?message=password_reset")
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An unexpected error occurred.")
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setLoading(false)
         }

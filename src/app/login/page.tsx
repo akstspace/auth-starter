@@ -8,6 +8,8 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Lock, Fingerprint, ChevronDown } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
+import { getAuthFlowParams, resolveCallbackUrl, withAuthFlow } from "@/lib/auth-flow"
 
 function LoginContent() {
   const [passkeyLoading, setPasskeyLoading] = useState(false)
@@ -20,12 +22,15 @@ function LoginContent() {
   const [successMessage, setSuccessMessage] = useState("")
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session, isPending } = authClient.useSession()
+
+  const flow = getAuthFlowParams(searchParams)
+  const callbackTarget = resolveCallbackUrl(flow)
 
   useEffect(() => {
     const method = authClient.getLastUsedLoginMethod()
     if (method) {
       setLastMethod(method)
-      // Auto-expand password form if last login was email
       if (method === "email") {
         setShowPasswordForm(true)
       }
@@ -38,15 +43,24 @@ function LoginContent() {
     }
   }, [searchParams])
 
+  useEffect(() => {
+    if (!isPending && session?.user) {
+      router.replace(callbackTarget)
+    }
+  }, [callbackTarget, isPending, router, session?.user])
+
   const handleGoogleSignIn = async () => {
     setError("")
     try {
-      const result = await authClient.signIn.social({ provider: "google" })
+      const result = await authClient.signIn.social({
+        provider: "google",
+        callbackURL: callbackTarget,
+      })
       if (result.error) {
-        setError(result.error.message || "Google sign in failed.")
+        setError(getAuthErrorMessage(result.error, "Google sign in failed."))
       }
-    } catch {
-      setError("An unexpected error occurred.")
+    } catch (err) {
+      setError(getAuthErrorMessage(err, "An unexpected error occurred."))
     }
   }
 
@@ -57,16 +71,16 @@ function LoginContent() {
       await authClient.signIn.passkey({
         fetchOptions: {
           onSuccess() {
-            router.push("/")
+            router.push(callbackTarget)
           },
           onError(context) {
-            setError(context.error.message || "Passkey authentication failed.")
+            setError(getAuthErrorMessage(context.error, "Passkey authentication failed."))
           },
         },
       })
     } catch (err) {
       if (err instanceof Error && err.name === "NotAllowedError") return
-      setError("Passkey authentication failed. Try another method.")
+      setError(getAuthErrorMessage(err, "Passkey authentication failed. Try another method."))
     } finally {
       setPasskeyLoading(false)
     }
@@ -78,23 +92,32 @@ function LoginContent() {
     setError("")
 
     try {
-      const { error, data } = await authClient.signIn.email(
-        { email, password },
+      const { error: signInError } = await authClient.signIn.email(
+        {
+          email,
+          password,
+          callbackURL: callbackTarget,
+        },
         {
           onSuccess(context) {
             if (context.data.twoFactorRedirect) {
-              router.push("/2fa")
+              router.push(
+                withAuthFlow("/2fa", {
+                  callbackUrl: callbackTarget,
+                  invitationId: flow.invitationId,
+                }),
+              )
             } else {
-              router.push("/")
+              router.push(callbackTarget)
             }
-          }
-        }
+          },
+        },
       )
-      if (error) {
-        setError(error.message || "Invalid email or password.")
+      if (signInError) {
+        setError(getAuthErrorMessage(signInError, "Invalid email or password."))
       }
-    } catch {
-      setError("An unexpected error occurred.")
+    } catch (err) {
+      setError(getAuthErrorMessage(err, "An unexpected error occurred."))
     } finally {
       setEmailLoading(false)
     }
@@ -106,6 +129,10 @@ function LoginContent() {
     </span>
   )
 
+  if (!isPending && session?.user) {
+    return null
+  }
+
   return (
     <div className="min-h-dvh bg-background text-foreground flex items-center justify-center p-4">
       <motion.div
@@ -114,7 +141,6 @@ function LoginContent() {
         transition={{ duration: 0.4, ease: "easeOut" }}
         className="w-full max-w-sm"
       >
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="flex items-center justify-center size-9 rounded-lg bg-muted">
@@ -139,7 +165,6 @@ function LoginContent() {
           </div>
         )}
 
-        {/* Sign in options */}
         <div className="space-y-2.5">
           <Button
             type="button"
@@ -228,10 +253,15 @@ function LoginContent() {
           )}
         </div>
 
-        {/* Footer link */}
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-foreground font-medium hover:underline underline-offset-2">
+          <Link
+            href={withAuthFlow("/signup", {
+              callbackUrl: flow.callbackUrl,
+              invitationId: flow.invitationId,
+            })}
+            className="text-foreground font-medium hover:underline underline-offset-2"
+          >
             Create one
           </Link>
         </p>

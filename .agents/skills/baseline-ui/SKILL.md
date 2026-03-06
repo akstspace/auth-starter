@@ -27,10 +27,11 @@ Enforces an opinionated UI baseline to prevent AI-generated interface slop.
 
 ## Components
 
-- MUST use accessible component primitives for anything with keyboard or focus behavior (`Base UI`, `React Aria`, `Radix`)
-- MUST use the project’s existing component primitives first
+- MUST use the project’s existing `shadcn/ui` components first (`src/components/ui/*`)
+- MUST add missing primitives via shadcn component generation instead of hand-rolling keyboard/focus logic
+- MUST use shadcn chart patterns for data visualization when charts are needed
 - NEVER mix primitive systems within the same interaction surface
-- SHOULD prefer [`Base UI`](https://base-ui.com/react/components) for new primitives if compatible with the stack
+- NEVER introduce a second primitive library when a shadcn component is available
 - MUST add an `aria-label` to icon-only buttons
 - NEVER rebuild keyboard or focus behavior by hand unless explicitly requested
 

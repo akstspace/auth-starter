@@ -1,15 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { use } from "react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Shield, KeySquare, ShieldCheck, Download } from "lucide-react"
 import QRCode from "react-qr-code"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
-export default function SecuritySettingsPage({ params }: { params: Promise<{ orgId: string }> }) {
-    const { orgId } = use(params)
+export default function SecuritySettingsPage() {
     const [loading, setLoading] = useState(false)
     const [password, setPassword] = useState("")
     const [totpURI, setTotpURI] = useState("")
@@ -27,18 +26,18 @@ export default function SecuritySettingsPage({ params }: { params: Promise<{ org
         setError("")
 
         try {
-            const { data, error } = await authClient.twoFactor.enable({
+            const { data, error: requestError } = await authClient.twoFactor.enable({
                 password,
             })
 
-            if (error) {
-                setError(error.message || "Failed to enable 2FA.")
+            if (requestError) {
+                setError(getAuthErrorMessage(requestError, "Failed to enable 2FA."))
             } else if (data) {
                 if (data.totpURI) setTotpURI(data.totpURI)
                 if (data.backupCodes) setBackupCodes(data.backupCodes)
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to enable 2FA.")
+            setError(getAuthErrorMessage(err, "Failed to enable 2FA."))
         } finally {
             setPassword("")
             setLoading(false)
@@ -51,17 +50,17 @@ export default function SecuritySettingsPage({ params }: { params: Promise<{ org
         setError("")
 
         try {
-            const { data, error } = await authClient.twoFactor.verifyTotp({
+            const { error: requestError } = await authClient.twoFactor.verifyTotp({
                 code: totpCode,
             })
 
-            if (error) {
-                setError(error.message || "Invalid code. Please try again.")
+            if (requestError) {
+                setError(getAuthErrorMessage(requestError, "Invalid code. Please try again."))
             } else {
                 setVerified(true)
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Verification failed.")
+            setError(getAuthErrorMessage(err, "Verification failed."))
         } finally {
             setLoading(false)
         }
@@ -73,17 +72,17 @@ export default function SecuritySettingsPage({ params }: { params: Promise<{ org
         setError("")
 
         try {
-            const { error } = await authClient.twoFactor.disable({
+            const { error: requestError } = await authClient.twoFactor.disable({
                 password,
             })
 
-            if (error) {
-                setError(error.message || "Failed to disable 2FA.")
+            if (requestError) {
+                setError(getAuthErrorMessage(requestError, "Failed to disable 2FA."))
             } else {
                 window.location.reload()
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to disable 2FA.")
+            setError(getAuthErrorMessage(err, "Failed to disable 2FA."))
         } finally {
             setLoading(false)
         }
@@ -114,7 +113,6 @@ export default function SecuritySettingsPage({ params }: { params: Promise<{ org
 
                 {error && <div className="text-sm text-destructive mb-4">{error}</div>}
 
-                {/* Step 1: Enter password to start enabling 2FA */}
                 {!is2FAEnabled && !totpURI && (
                     <form onSubmit={enable2FA} className="space-y-4 max-w-sm mt-6">
                         <p className="text-sm font-medium">Verify your password to enable 2FA:</p>
@@ -131,7 +129,6 @@ export default function SecuritySettingsPage({ params }: { params: Promise<{ org
                     </form>
                 )}
 
-                {/* Step 2: Show QR code and verify TOTP code */}
                 {totpURI && !verified && (
                     <div className="mt-6 space-y-6">
                         <div className="p-4 bg-white rounded-lg inline-block">
@@ -159,7 +156,6 @@ export default function SecuritySettingsPage({ params }: { params: Promise<{ org
                     </div>
                 )}
 
-                {/* Step 3: Show backup codes after successful verification */}
                 {verified && backupCodes.length > 0 && (
                     <div className="mt-6 space-y-4">
                         <div className="text-sm text-emerald-500 font-medium">
@@ -205,7 +201,6 @@ export default function SecuritySettingsPage({ params }: { params: Promise<{ org
                     </div>
                 )}
 
-                {/* Disable 2FA section */}
                 {is2FAEnabled && (
                     <form onSubmit={disable2FA} className="space-y-4 max-w-sm mt-6 border-t border-border/50 pt-6">
                         <p className="text-sm font-medium">Verify your password to disable 2FA:</p>

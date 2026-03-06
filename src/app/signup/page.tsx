@@ -1,15 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import Link from "next/link"
 import { motion } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { UserPlus, ChevronDown } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { getAuthErrorMessage } from "@/lib/auth-error"
+import { getAuthFlowParams, getInvitationCallbackUrl, resolveCallbackUrl, withAuthFlow } from "@/lib/auth-flow"
 
-export default function SignUpPage() {
+function SignUpContent() {
   const [emailLoading, setEmailLoading] = useState(false)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [firstName, setFirstName] = useState("")
@@ -18,16 +20,32 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { data: session, isPending } = authClient.useSession()
+
+  const flow = getAuthFlowParams(searchParams)
+  const callbackTarget = resolveCallbackUrl(flow)
+  const invitationCallback = getInvitationCallbackUrl(flow.invitationId)
+  const postVerificationCallback = invitationCallback ?? flow.callbackUrl ?? "/email-verified"
+
+  useEffect(() => {
+    if (!isPending && session?.user) {
+      router.replace(callbackTarget)
+    }
+  }, [callbackTarget, isPending, router, session?.user])
 
   const handleGoogleSignIn = async () => {
     setError("")
     try {
-      const result = await authClient.signIn.social({ provider: "google" })
+      const result = await authClient.signIn.social({
+        provider: "google",
+        callbackURL: callbackTarget,
+      })
       if (result.error) {
-        setError(result.error.message || "Google sign up failed.")
+        setError(getAuthErrorMessage(result.error, "Google sign up failed."))
       }
-    } catch {
-      setError("An unexpected error occurred.")
+    } catch (err) {
+      setError(getAuthErrorMessage(err, "An unexpected error occurred."))
     }
   }
 
@@ -37,27 +55,37 @@ export default function SignUpPage() {
     setError("")
 
     try {
-      const { error, data } = await authClient.signUp.email(
+      const { error: signUpError } = await authClient.signUp.email(
         {
           email,
           password,
           name: `${firstName} ${lastName}`.trim(),
-          callbackURL: "/email-verified",
+          callbackURL: postVerificationCallback,
         },
         {
-          onSuccess(context) {
-            router.push(`/verify-email?email=${encodeURIComponent(email)}`)
-          }
-        }
+          onSuccess() {
+            const verifyEmailPath = withAuthFlow(
+              `/verify-email?email=${encodeURIComponent(email)}&callbackUrl=${encodeURIComponent(postVerificationCallback)}`,
+              {
+                invitationId: flow.invitationId,
+              },
+            )
+            router.push(verifyEmailPath)
+          },
+        },
       )
-      if (error) {
-        setError(error.message || "Failed to create account.")
+      if (signUpError) {
+        setError(getAuthErrorMessage(signUpError, "Failed to create account."))
       }
-    } catch {
-      setError("An unexpected error occurred.")
+    } catch (err) {
+      setError(getAuthErrorMessage(err, "An unexpected error occurred."))
     } finally {
       setEmailLoading(false)
     }
+  }
+
+  if (!isPending && session?.user) {
+    return null
   }
 
   return (
@@ -68,7 +96,6 @@ export default function SignUpPage() {
         transition={{ duration: 0.4, ease: "easeOut" }}
         className="w-full max-w-sm"
       >
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="flex items-center justify-center size-9 rounded-lg bg-muted">
@@ -177,14 +204,27 @@ export default function SignUpPage() {
           )}
         </div>
 
-        {/* Footer link */}
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/login" className="text-foreground font-medium hover:underline underline-offset-2">
+          <Link
+            href={withAuthFlow("/login", {
+              callbackUrl: flow.callbackUrl,
+              invitationId: flow.invitationId,
+            })}
+            className="text-foreground font-medium hover:underline underline-offset-2"
+          >
             Sign in
           </Link>
         </p>
       </motion.div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignUpContent />
+    </Suspense>
   )
 }

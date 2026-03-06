@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Building2, Plus, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
+import { generateSlug } from "@/lib/utils"
 
 interface Organization {
     id: string
@@ -16,10 +18,20 @@ interface Organization {
     createdAt: string
 }
 
+const isOrgManagerRole = (role: string | undefined) => {
+    if (!role) return false
+    return role
+        .split(",")
+        .map((value) => value.trim())
+        .some((value) => value === "owner" || value === "admin")
+}
+
 export default function OrganizationsPage() {
-    const params = useParams()
     const router = useRouter()
-    const currentOrgId = params.orgId as string
+    const { data: activeOrg } = authClient.useActiveOrganization()
+    const { data: activeMemberRole, isPending: roleLoading } = authClient.useActiveMemberRole()
+    const currentOrgId = activeOrg?.id
+
     const [orgs, setOrgs] = useState<Organization[]>([])
     const [loading, setLoading] = useState(true)
     const [showCreate, setShowCreate] = useState(false)
@@ -30,30 +42,64 @@ export default function OrganizationsPage() {
     const [editSlug, setEditSlug] = useState("")
     const [error, setError] = useState("")
 
+    const canManageOrg = isOrgManagerRole(activeMemberRole?.role)
+
     const fetchOrgs = useCallback(async () => {
         try {
-            const { data } = await authClient.organization.list()
+            const { data, error: listError } = await authClient.organization.list()
+            if (listError) {
+                setError(getAuthErrorMessage(listError, "Failed to load organizations."))
+                return
+            }
             if (data) setOrgs(data as unknown as Organization[])
-        } catch { /* silent */ } finally {
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "Failed to load organizations."))
+        } finally {
             setLoading(false)
         }
     }, [])
 
-    useEffect(() => { fetchOrgs() }, [fetchOrgs])
+    useEffect(() => {
+        if (roleLoading) return
+        if (!canManageOrg) {
+            setLoading(false)
+            return
+        }
+        fetchOrgs()
+    }, [canManageOrg, fetchOrgs, roleLoading])
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault()
         setCreating(true)
         setError("")
         try {
-            const slug = newName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
-            const { data, error: err } = await authClient.organization.create({ name: newName, slug })
-            if (err) { setError(err.message || "Failed to create."); return }
-            if (data) {
-                await authClient.organization.setActive({ organizationId: data.id })
-                router.push(`/org/${data.id}`)
+            const trimmed = newName.trim()
+            const slug = generateSlug(trimmed)
+            if (!slug) {
+                setError("Organization name must contain at least one letter or number.")
+                setCreating(false)
+                return
             }
-        } catch { setError("Unexpected error.") } finally { setCreating(false) }
+            const { data, error: err } = await authClient.organization.create({ name: trimmed, slug })
+            if (err) {
+                setError(getAuthErrorMessage(err, "Failed to create organization."))
+                return
+            }
+            if (data) {
+                const { error: activeError } = await authClient.organization.setActive({
+                    organizationId: data.id,
+                })
+                if (activeError) {
+                    setError(getAuthErrorMessage(activeError, "Failed to activate organization."))
+                    return
+                }
+                router.push("/org")
+            }
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "Unexpected error."))
+        } finally {
+            setCreating(false)
+        }
     }
 
     const handleUpdate = async (orgId: string) => {
@@ -63,10 +109,15 @@ export default function OrganizationsPage() {
                 organizationId: orgId,
                 data: { name: editName, slug: editSlug },
             })
-            if (err) { setError(err.message || "Failed to update."); return }
+            if (err) {
+                setError(getAuthErrorMessage(err, "Failed to update organization."))
+                return
+            }
             setEditingId(null)
             fetchOrgs()
-        } catch { setError("Unexpected error.") }
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "Unexpected error."))
+        }
     }
 
     const handleDelete = async (orgId: string) => {
@@ -74,7 +125,7 @@ export default function OrganizationsPage() {
         try {
             const { error: err } = await authClient.organization.delete({ organizationId: orgId })
             if (err) {
-                setError(err.message || "Failed to delete organization.")
+                setError(getAuthErrorMessage(err, "Failed to delete organization."))
                 return
             }
             if (orgId === currentOrgId) {
@@ -82,7 +133,9 @@ export default function OrganizationsPage() {
             } else {
                 fetchOrgs()
             }
-        } catch { setError("Failed to delete organization.") }
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "Failed to delete organization."))
+        }
     }
 
     const startEdit = (org: Organization) => {
@@ -91,10 +144,21 @@ export default function OrganizationsPage() {
         setEditSlug(org.slug)
     }
 
-    if (loading) {
+    if (loading || roleLoading) {
         return (
             <div className="flex items-center justify-center py-20">
                 <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (!canManageOrg) {
+        return (
+            <div className="rounded-xl border border-border/50 bg-card/30 p-6">
+                <h1 className="text-xl font-bold text-foreground">Organizations</h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                    Only organization owners and admins can manage organization settings.
+                </p>
             </div>
         )
     }
@@ -104,17 +168,16 @@ export default function OrganizationsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-xl font-bold text-foreground">Organizations</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Manage your organizations.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Manage your organizations.</p>
                 </div>
                 <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
-                    <Plus className="size-3.5 mr-1.5" />
+                    <Plus className="mr-1.5 size-3.5" />
                     New
                 </Button>
             </div>
 
             {error && <p className="text-sm text-red-500">{error}</p>}
 
-            {/* Create Form */}
             <AnimatePresence>
                 {showCreate && (
                     <motion.div
@@ -123,7 +186,7 @@ export default function OrganizationsPage() {
                         exit={{ opacity: 0, height: 0 }}
                         className="overflow-hidden"
                     >
-                        <form onSubmit={handleCreate} className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 space-y-4">
+                        <form onSubmit={handleCreate} className="space-y-4 rounded-xl border border-border/50 bg-card/50 p-6 backdrop-blur-sm">
                             <Input
                                 placeholder="Organization name"
                                 value={newName}
@@ -145,35 +208,34 @@ export default function OrganizationsPage() {
                 )}
             </AnimatePresence>
 
-            {/* Orgs List */}
-            <div className="rounded-xl border border-border/50 bg-card/30 divide-y divide-border/30 overflow-hidden">
+            <div className="overflow-hidden rounded-xl border border-border/50 bg-card/30 divide-y divide-border/30">
                 {orgs.map((org) => (
                     <div key={org.id} className={`px-5 py-4 transition-colors ${org.id === currentOrgId ? "bg-muted/30" : "hover:bg-muted/20"}`}>
                         {editingId === org.id ? (
                             <div className="space-y-3">
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div>
-                                        <label className="text-xs text-muted-foreground mb-1 block">Name</label>
-                                        <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="bg-muted/50 border-border/50 h-8 text-sm" />
+                                        <label className="mb-1 block text-xs text-muted-foreground">Name</label>
+                                        <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 bg-muted/50 border-border/50 text-sm" />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground mb-1 block">Slug</label>
-                                        <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value)} className="bg-muted/50 border-border/50 h-8 text-sm" />
+                                        <label className="mb-1 block text-xs text-muted-foreground">Slug</label>
+                                        <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value)} className="h-8 bg-muted/50 border-border/50 text-sm" />
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => handleUpdate(org.id)} className="text-emerald-500 hover:text-emerald-400 transition-colors" title="Save" aria-label="Save organization">
+                                    <button onClick={() => handleUpdate(org.id)} className="text-emerald-500 transition-colors hover:text-emerald-400" title="Save" aria-label="Save organization">
                                         <Check className="size-4" />
                                     </button>
-                                    <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground transition-colors" title="Cancel" aria-label="Cancel editing">
+                                    <button onClick={() => setEditingId(null)} className="text-muted-foreground transition-colors hover:text-foreground" title="Cancel" aria-label="Cancel editing">
                                         <X className="size-4" />
                                     </button>
                                 </div>
                             </div>
                         ) : (
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
                                         {org.logo ? (
                                             <img src={org.logo} alt="" className="size-9 rounded-lg object-cover" />
                                         ) : (
@@ -182,19 +244,19 @@ export default function OrganizationsPage() {
                                     </div>
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-foreground truncate">{org.name}</p>
+                                            <p className="truncate text-sm font-medium text-foreground">{org.name}</p>
                                             {org.id === currentOrgId && (
-                                                <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium text-muted-foreground">Active</span>
+                                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Active</span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-muted-foreground truncate">{org.slug} · {org.id.slice(0, 8)}…</p>
+                                        <p className="truncate text-xs text-muted-foreground">{org.slug} · {org.id.slice(0, 8)}…</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <button onClick={() => startEdit(org)} className="text-muted-foreground hover:text-foreground transition-colors" title="Edit" aria-label="Edit organization">
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <button onClick={() => startEdit(org)} className="text-muted-foreground transition-colors hover:text-foreground" title="Edit" aria-label="Edit organization">
                                         <Pencil className="size-3.5" />
                                     </button>
-                                    <button onClick={() => handleDelete(org.id)} className="text-muted-foreground hover:text-red-500 transition-colors" title="Delete" aria-label="Delete organization">
+                                    <button onClick={() => handleDelete(org.id)} className="text-muted-foreground transition-colors hover:text-red-500" title="Delete" aria-label="Delete organization">
                                         <Trash2 className="size-3.5" />
                                     </button>
                                 </div>
@@ -204,7 +266,7 @@ export default function OrganizationsPage() {
                 ))}
                 {orgs.length === 0 && (
                     <div className="px-5 py-10 text-center">
-                        <Building2 className="size-8 text-muted-foreground mx-auto mb-3" />
+                        <Building2 className="mx-auto mb-3 size-8 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">No organizations yet.</p>
                     </div>
                 )}

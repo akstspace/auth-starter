@@ -5,18 +5,26 @@ import { jwtClient } from "better-auth/client/plugins";
 import { organizationClient } from "better-auth/client/plugins";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { lastLoginMethodClient, twoFactorClient } from "better-auth/client/plugins";
+import { getAuthErrorMessage } from "@/lib/auth-error";
+import { withAuthFlow } from "@/lib/auth-flow";
 
 export const authClient = createAuthClient({
   baseURL:
     process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000",
   plugins: [
     jwtClient(),
-    organizationClient(),
+    organizationClient({
+      teams: { enabled: true },
+    }),
     passkeyClient(),
     lastLoginMethodClient(),
     twoFactorClient({
       onTwoFactorRedirect() {
-        window.location.href = "/2fa";
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = withAuthFlow("/2fa", {
+          callbackUrl: params.get("callbackUrl"),
+          invitationId: params.get("invitationId"),
+        });
       },
     }),
   ],
@@ -24,7 +32,12 @@ export const authClient = createAuthClient({
     onError: async (ctx) => {
       if (ctx.response.status === 429) {
         console.warn("[Auth] Rate limited — please try again shortly.");
+        return;
       }
+      console.log(
+        "[Auth] Request failed:",
+        getAuthErrorMessage(ctx.error, "Unexpected authentication error."),
+      );
     },
   },
 });

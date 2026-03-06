@@ -6,6 +6,7 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Fingerprint, Plus, Pencil, Trash2, Loader2, KeyRound } from "lucide-react"
+import { getAuthErrorMessage } from "@/lib/auth-error"
 
 interface Passkey {
     id: string
@@ -27,8 +28,8 @@ export default function PasskeysSettingsPage() {
         try {
             const { data } = await authClient.passkey.listUserPasskeys({})
             setPasskeys((data as Passkey[]) || [])
-        } catch {
-            setError("Failed to load passkeys.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "Failed to load passkeys."))
         } finally {
             setLoading(false)
         }
@@ -44,12 +45,12 @@ export default function PasskeysSettingsPage() {
         try {
             const { error: err } = await authClient.passkey.addPasskey({})
             if (err) {
-                setError(err.message || "Failed to add passkey.")
+                setError(getAuthErrorMessage(err, "Failed to add passkey."))
                 return
             }
             await fetchPasskeys()
-        } catch {
-            setError("An unexpected error occurred.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setActionLoading(false)
         }
@@ -64,13 +65,13 @@ export default function PasskeysSettingsPage() {
                 name: editName,
             })
             if (err) {
-                setError(err.message || "Failed to rename passkey.")
+                setError(getAuthErrorMessage(err, "Failed to rename passkey."))
                 return
             }
             setEditingId(null)
             await fetchPasskeys()
-        } catch {
-            setError("An unexpected error occurred.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setActionLoading(false)
         }
@@ -82,13 +83,13 @@ export default function PasskeysSettingsPage() {
         try {
             const { error: err } = await authClient.passkey.deletePasskey({ id })
             if (err) {
-                setError(err.message || "Failed to delete passkey.")
+                setError(getAuthErrorMessage(err, "Failed to delete passkey."))
                 return
             }
             setDeletingId(null)
             await fetchPasskeys()
-        } catch {
-            setError("An unexpected error occurred.")
+        } catch (err) {
+            setError(getAuthErrorMessage(err, "An unexpected error occurred."))
         } finally {
             setActionLoading(false)
         }
