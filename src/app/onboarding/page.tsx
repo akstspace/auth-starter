@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Building2 } from "lucide-react"
 import { getAuthErrorMessage } from "@/lib/auth-error"
+import { generateSlug } from "@/lib/utils"
 
 export default function OnboardingPage() {
     const [name, setName] = useState("")
@@ -21,12 +22,7 @@ export default function OnboardingPage() {
         setError("")
         try {
             const trimmed = name.trim()
-            const slug = trimmed
-                .toLowerCase()
-                .replace(/\s+/g, "-")
-                .replace(/[^a-z0-9-]/g, "")
-                .replace(/-+/g, "-")
-                .replace(/^-+|-+$/g, "")
+            const slug = generateSlug(trimmed)
             if (!slug) {
                 setError("Organization name must contain at least one letter or number.")
                 return

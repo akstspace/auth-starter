@@ -146,7 +146,7 @@ function TwoFactorContent() {
 
 export default function TwoFactorPage() {
     return (
-        <Suspense>
+        <Suspense fallback={null}>
             <TwoFactorContent />
         </Suspense>
     )

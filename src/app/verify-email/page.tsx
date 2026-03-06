@@ -154,10 +154,10 @@ function VerifyEmailContent() {
                                 type="button"
                                 onClick={async () => {
                                     await authClient.signOut()
-                                    const currentUrl = `/verify-email${searchParams.toString() ? `?${searchParams.toString()}` : ""}`
+                                    const verifyEmailPath = `/verify-email${searchParams.toString() ? `?${searchParams.toString()}` : ""}`
                                     router.push(
                                         withAuthFlow("/login", {
-                                            callbackUrl: currentUrl,
+                                            callbackUrl: verifyEmailPath,
                                             invitationId: flow.invitationId,
                                         }),
                                     )
