@@ -20,8 +20,18 @@ export default function OnboardingPage() {
         setLoading(true)
         setError("")
         try {
-            const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
-            const { data, error: err } = await authClient.organization.create({ name, slug })
+            const trimmed = name.trim()
+            const slug = trimmed
+                .toLowerCase()
+                .replace(/\s+/g, "-")
+                .replace(/[^a-z0-9-]/g, "")
+                .replace(/-+/g, "-")
+                .replace(/^-+|-+$/g, "")
+            if (!slug) {
+                setError("Organization name must contain at least one letter or number.")
+                return
+            }
+            const { data, error: err } = await authClient.organization.create({ name: trimmed, slug })
             if (err) {
                 setError(getAuthErrorMessage(err, "Failed to create organization."))
                 return
