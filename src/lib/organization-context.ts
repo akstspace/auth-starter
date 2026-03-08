@@ -1,14 +1,56 @@
 import { authClient } from "@/lib/auth-client";
 
+// ── Per-org active-team preference (localStorage) ─────────────────────────
+// Keyed by org ID so switching back to a previously visited org restores
+// the last team the user had active there.
+
+const TEAM_PREF_KEY = "ba_org_team_pref";
+
+interface TeamPreferences {
+  [orgId: string]: string;
+}
+
+export const saveTeamPreference = (orgId: string, teamId: string): void => {
+  try {
+    const raw = localStorage.getItem(TEAM_PREF_KEY);
+    const prefs: TeamPreferences = raw
+      ? (JSON.parse(raw) as TeamPreferences)
+      : {};
+    prefs[orgId] = teamId;
+    localStorage.setItem(TEAM_PREF_KEY, JSON.stringify(prefs));
+  } catch {
+    // localStorage unavailable (SSR / private browsing) — silently ignore
+  }
+};
+
+const loadTeamPreference = (orgId: string): string | null => {
+  try {
+    const raw = localStorage.getItem(TEAM_PREF_KEY);
+    if (!raw) return null;
+    const prefs = JSON.parse(raw) as TeamPreferences;
+    return prefs[orgId] ?? null;
+  } catch {
+    return null;
+  }
+};
+
+// ── Active org + team resolution ──────────────────────────────────────────
+
+interface TeamLike {
+  id: string;
+}
+
 /**
- * Switches the active organization and synchronises the active team.
+ * Switches the active organization and resolves the best active team:
  *
- * - Setting the org is mandatory: any error is returned to the caller.
- * - Setting the team is best-effort: since a user belongs to at most one team
- *   per org, we just read `data[0]` from `listUserTeams`. If that call (or the
- *   subsequent `setActiveTeam`) fails the org switch is still considered
- *   successful — an unset `activeTeamId` is recoverable, a partially-applied
- *   org switch is not.
+ * 1. Fetch the user's teams in the new org.
+ * 2. If a saved preference exists for this org **and** is still present in
+ *    the team list → restore it.
+ * 3. Otherwise fall back to the first team in the list.
+ * 4. If the user has no teams → explicitly clear activeTeamId (null).
+ *
+ * The org switch is mandatory — its error is returned to the caller.
+ * Team resolution is best-effort — failures are logged, never propagated.
  */
 export const setActiveOrganizationWithTeam = async (
   organizationId: string,
@@ -21,8 +63,6 @@ export const setActiveOrganizationWithTeam = async (
     return { error: orgError };
   }
 
-  // Best-effort: resolve the user's (at most one) team in the new org and
-  // activate it, or clear the previous active team when there is none.
   try {
     const { data, error: listError } =
       await authClient.organization.listUserTeams();
@@ -32,13 +72,24 @@ export const setActiveOrganizationWithTeam = async (
       return { error: null };
     }
 
-    const teamId = Array.isArray(data) ? (data[0]?.id ?? null) : null;
+    const teams: TeamLike[] = Array.isArray(data) ? (data as TeamLike[]) : [];
 
-    const { error: teamError } =
-      await authClient.organization.setActiveTeam({ teamId });
+    // Validate saved preference; fall back to first team; null if no teams.
+    const saved = loadTeamPreference(organizationId);
+    const teamId: string | null =
+      saved != null && teams.some((t) => t.id === saved)
+        ? saved
+        : (teams[0]?.id ?? null);
+
+    const { error: teamError } = await authClient.organization.setActiveTeam({
+      teamId,
+    });
 
     if (teamError) {
       console.warn("[org-context] Could not set active team:", teamError);
+    } else if (teamId) {
+      // Persist so switching back to this org restores the same team.
+      saveTeamPreference(organizationId, teamId);
     }
   } catch (err) {
     console.warn(

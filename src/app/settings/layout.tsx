@@ -18,6 +18,7 @@ import { authClient } from "@/lib/auth-client"
 import { LoginRequired } from "@/components/login-required"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { OrgSwitcher } from "@/components/org-switcher"
+import { TeamSwitcher } from "@/components/team-switcher"
 import { getAuthErrorMessage } from "@/lib/auth-error"
 
 interface NavItem {
@@ -89,6 +90,7 @@ export default function OrgSettingsLayout({ children }: { children: React.ReactN
                             </Link>
                             <span className="hidden text-border/60 sm:inline">/</span>
                             <OrgSwitcher />
+                            <TeamSwitcher />
                         </div>
                         <div className="flex items-center gap-3">
                             <Link

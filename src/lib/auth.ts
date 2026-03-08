@@ -3,7 +3,6 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/db";
 import { member, team, teamMember } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { APIError } from "better-auth/api";
 import {
   jwt,
   lastLoginMethod,
@@ -12,6 +11,79 @@ import {
 } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { sendInvitationEmail, sendVerificationEmail, sendPasswordResetEmail, send2FAEmail } from "@/lib/email";
+
+// ── Team-management helpers ───────────────────────────────────────────────────
+// These use Drizzle directly to avoid a circular reference with `auth`.
+
+const isManagerRole = (role: string | undefined | null): boolean =>
+  (role ?? "")
+    .split(",")
+    .map((r) => r.trim())
+    .some((r) => r === "owner" || r === "admin");
+
+/**
+ * Adds a single user to every team in the given organization.
+ * Silently ignores duplicate-member errors.
+ */
+const addUserToAllOrgTeams = async (
+  userId: string,
+  orgId: string,
+): Promise<void> => {
+  const orgTeams = await db
+    .select({ id: team.id })
+    .from(team)
+    .where(eq(team.organizationId, orgId));
+
+  for (const t of orgTeams) {
+    const alreadyMember = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(and(eq(teamMember.teamId, t.id), eq(teamMember.userId, userId)))
+      .limit(1);
+
+    if (alreadyMember.length === 0) {
+      await db.insert(teamMember).values({
+        id: crypto.randomUUID(),
+        teamId: t.id,
+        userId,
+        createdAt: new Date(),
+      });
+    }
+  }
+};
+
+/**
+ * Adds all admin/owner members of an org to the given team.
+ * Silently ignores users already in the team.
+ */
+const addAllOrgManagersToTeam = async (
+  teamId: string,
+  orgId: string,
+): Promise<void> => {
+  const orgMembers = await db
+    .select({ userId: member.userId, role: member.role })
+    .from(member)
+    .where(eq(member.organizationId, orgId));
+
+  for (const m of orgMembers) {
+    if (!isManagerRole(m.role)) continue;
+
+    const alreadyMember = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, m.userId)))
+      .limit(1);
+
+    if (alreadyMember.length === 0) {
+      await db.insert(teamMember).values({
+        id: crypto.randomUUID(),
+        teamId,
+        userId: m.userId,
+        createdAt: new Date(),
+      });
+    }
+  }
+};
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -93,23 +165,41 @@ export const auth = betterAuth({
         },
       },
       organizationHooks: {
-        beforeAddTeamMember: async ({ teamMember: newMember, organization: activeOrg }) => {
-          const existingTeams = await db
-            .select({ id: teamMember.id })
-            .from(teamMember)
-            .innerJoin(team, eq(teamMember.teamId, team.id))
-            .where(
-              and(
-                eq(teamMember.userId, newMember.userId),
-                eq(team.organizationId, activeOrg.id)
-              )
-            );
+        /**
+         * When a new member joins the org as admin/owner, immediately add them
+         * to every existing team so `listTeamMembers` works natively for them.
+         */
+        afterAddMember: async ({ member: newMember, organization: org }) => {
+          const isManager = newMember.role
+            ?.split(",")
+            .map((r: string) => r.trim())
+            .some((r: string) => r === "owner" || r === "admin");
 
-          if (existingTeams.length > 0) {
-            throw new APIError("BAD_REQUEST", {
-              message: "User is already part of a team in this organization. Users can only be in one team at a time."
-            });
-          }
+          if (!isManager) return;
+
+          await addUserToAllOrgTeams(newMember.userId, org.id);
+        },
+
+        /**
+         * When a member is promoted to admin/owner, add them to all teams.
+         */
+        afterUpdateMemberRole: async ({ member: updatedMember, organization: org }) => {
+          const isManager = updatedMember.role
+            ?.split(",")
+            .map((r: string) => r.trim())
+            .some((r: string) => r === "owner" || r === "admin");
+
+          if (!isManager) return;
+
+          await addUserToAllOrgTeams(updatedMember.userId, org.id);
+        },
+
+        /**
+         * When a new team is created, add all current admins/owners to it so
+         * they can view and manage its members without needing to join first.
+         */
+        afterCreateTeam: async ({ team: newTeam, organization: org }) => {
+          await addAllOrgManagersToTeam(newTeam.id, org.id);
         },
       },
     }),

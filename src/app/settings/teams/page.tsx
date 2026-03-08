@@ -50,11 +50,9 @@ interface TeamMember {
 
 interface TeamMemberLoadError {
     message: string
-    code?: string
 }
 
 const EMPTY_MEMBER = "__member__"
-const TEAM_MEMBER_PERMISSION_ERROR = "USER_IS_NOT_A_MEMBER_OF_THE_TEAM"
 
 const isOrgManagerRole = (role: string | undefined) => {
     if (!role) return false
@@ -223,16 +221,10 @@ export default function TeamsPage() {
             })
 
             if (error) {
-                const errorCode =
-                    typeof error === "object" && error && "code" in error
-                        ? String((error as { code?: string }).code)
-                        : undefined
-
                 setTeamMemberErrorsByTeam((current) => ({
                     ...current,
                     [teamId]: {
                         message: getAuthErrorMessage(error, "Failed to load team members."),
-                        code: errorCode,
                     },
                 }))
                 setTeamMembersByTeam((current) => ({ ...current, [teamId]: [] }))
@@ -392,6 +384,26 @@ export default function TeamsPage() {
             }
 
             const addedMember = memberDirectory.get(selectedUserId)
+
+            // Auto-add admins / owners to all other teams in the org.
+            const addedRole = addedMember?.role ?? ""
+            const isManager = addedRole
+                .split(",")
+                .map((r) => r.trim())
+                .some((r) => r === "owner" || r === "admin")
+
+            if (isManager) {
+                const otherTeams = teams.filter((t) => t.id !== selectedTeamId)
+                await Promise.allSettled(
+                    otherTeams.map((t) =>
+                        authClient.organization.addTeamMember({
+                            teamId: t.id,
+                            userId: selectedUserId,
+                        }),
+                    ),
+                )
+            }
+
             setMembershipSuccess(
                 `Added ${addedMember?.user.name || addedMember?.user.email || "member"} to ${selectedTeam?.name || "team"}.`,
             )
@@ -432,35 +444,6 @@ export default function TeamsPage() {
             setMembershipError(getAuthErrorMessage(err, "Failed to remove member from team."))
         } finally {
             setRemovingMemberKey(null)
-        }
-    }
-
-    const handleJoinSelectedTeam = async () => {
-        if (!selectedTeamId || !session?.user?.id) return
-
-        setMembershipError("")
-        setMembershipSuccess("")
-
-        try {
-            const { error } = await authClient.organization.addTeamMember({
-                teamId: selectedTeamId,
-                userId: session.user.id,
-            })
-
-            if (error) {
-                setMembershipError(
-                    getAuthErrorMessage(
-                        error,
-                        "Failed to join this team. Ask an owner/admin to add you.",
-                    ),
-                )
-                return
-            }
-
-            setMembershipSuccess(`You were added to ${selectedTeam?.name || "this team"}.`)
-            await loadTeamMembers(selectedTeamId)
-        } catch (err) {
-            setMembershipError(getAuthErrorMessage(err, "Failed to join this team."))
         }
     }
 
@@ -755,21 +738,10 @@ export default function TeamsPage() {
                                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
                             </div>
                         ) : selectedTeamLoadError ? (
-                            <div className="space-y-3 px-6 py-4">
+                            <div className="px-6 py-4">
                                 <p className="text-sm text-destructive">
                                     {selectedTeamLoadError.message}
                                 </p>
-                                {selectedTeamLoadError.code === TEAM_MEMBER_PERMISSION_ERROR &&
-                                    session?.user?.id && (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => void handleJoinSelectedTeam()}
-                                        >
-                                            Join Team to View Members
-                                        </Button>
-                                    )}
                             </div>
                         ) : selectedTeamMembers.length === 0 ? (
                             <div className="px-6 py-8 text-center text-sm text-muted-foreground">
@@ -800,22 +772,24 @@ export default function TeamsPage() {
                                                     {email} · {role} · added {formatJoinedDate(teamMember.createdAt)}
                                                 </p>
                                             </div>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() =>
-                                                    void handleRemoveMemberFromSelectedTeam(teamMember.userId)
-                                                }
-                                                disabled={removingMemberKey === removeActionKey}
-                                                className="shrink-0 text-muted-foreground hover:text-destructive"
-                                            >
-                                                {removingMemberKey === removeActionKey ? (
-                                                    <Loader2 className="size-4 animate-spin" />
-                                                ) : (
-                                                    <Trash2 className="size-4" />
-                                                )}
-                                            </Button>
+                                            {teamMember.userId !== session?.user?.id && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() =>
+                                                        void handleRemoveMemberFromSelectedTeam(teamMember.userId)
+                                                    }
+                                                    disabled={removingMemberKey === removeActionKey}
+                                                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                                                >
+                                                    {removingMemberKey === removeActionKey ? (
+                                                        <Loader2 className="size-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="size-4" />
+                                                    )}
+                                                </Button>
+                                            )}
                                         </div>
                                     )
                                 })}
