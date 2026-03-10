@@ -5,6 +5,14 @@ import { authClient } from "@/lib/auth-client"
 import { getAuthErrorMessage } from "@/lib/auth-error"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
     Select,
@@ -50,11 +58,9 @@ interface TeamMember {
 
 interface TeamMemberLoadError {
     message: string
-    code?: string
 }
 
 const EMPTY_MEMBER = "__member__"
-const TEAM_MEMBER_PERMISSION_ERROR = "USER_IS_NOT_A_MEMBER_OF_THE_TEAM"
 
 const isOrgManagerRole = (role: string | undefined) => {
     if (!role) return false
@@ -122,6 +128,10 @@ export default function TeamsPage() {
     const [teamSuccess, setTeamSuccess] = useState("")
     const [membershipError, setMembershipError] = useState("")
     const [membershipSuccess, setMembershipSuccess] = useState("")
+
+    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; teamId: string; teamName: string }>(
+        { open: false, teamId: "", teamName: "" },
+    )
 
     const { data: activeMemberRole, isPending: roleLoading } = authClient.useActiveMemberRole()
     const { data: session } = authClient.useSession()
@@ -223,16 +233,10 @@ export default function TeamsPage() {
             })
 
             if (error) {
-                const errorCode =
-                    typeof error === "object" && error && "code" in error
-                        ? String((error as { code?: string }).code)
-                        : undefined
-
                 setTeamMemberErrorsByTeam((current) => ({
                     ...current,
                     [teamId]: {
                         message: getAuthErrorMessage(error, "Failed to load team members."),
-                        code: errorCode,
                     },
                 }))
                 setTeamMembersByTeam((current) => ({ ...current, [teamId]: [] }))
@@ -302,23 +306,6 @@ export default function TeamsPage() {
                     ? String((data as { id: string }).id)
                     : ""
 
-            if (createdTeamId && session?.user?.id) {
-                try {
-                    await authClient.organization.addTeamMember({
-                        teamId: createdTeamId,
-                        userId: session.user.id,
-                    })
-                } catch (addMemberError) {
-                    console.error(
-                        `Failed to add creator (userId=${session.user.id}) to team (teamId=${createdTeamId}):`,
-                        addMemberError,
-                    )
-                    setTeamError(
-                        getAuthErrorMessage(addMemberError, "Team created but failed to add you as a member."),
-                    )
-                }
-            }
-
             setNewTeamName("")
             setTeamSuccess(`Created team "${nextName}".`)
             await fetchBaseData()
@@ -364,10 +351,13 @@ export default function TeamsPage() {
         }
     }
 
-    const handleDeleteTeam = async (teamId: string, teamName: string) => {
-        const confirmed = window.confirm(`Delete team \"${teamName}\"? This cannot be undone.`)
-        if (!confirmed) return
+    const handleDeleteTeam = (teamId: string, teamName: string) => {
+        setDeleteConfirm({ open: true, teamId, teamName })
+    }
 
+    const handleConfirmDelete = async () => {
+        const { teamId, teamName } = deleteConfirm
+        setDeleteConfirm((prev) => ({ ...prev, open: false }))
         setDeletingTeamId(teamId)
         setTeamError("")
         setTeamSuccess("")
@@ -409,6 +399,7 @@ export default function TeamsPage() {
             }
 
             const addedMember = memberDirectory.get(selectedUserId)
+
             setMembershipSuccess(
                 `Added ${addedMember?.user.name || addedMember?.user.email || "member"} to ${selectedTeam?.name || "team"}.`,
             )
@@ -452,35 +443,6 @@ export default function TeamsPage() {
         }
     }
 
-    const handleJoinSelectedTeam = async () => {
-        if (!selectedTeamId || !session?.user?.id) return
-
-        setMembershipError("")
-        setMembershipSuccess("")
-
-        try {
-            const { error } = await authClient.organization.addTeamMember({
-                teamId: selectedTeamId,
-                userId: session.user.id,
-            })
-
-            if (error) {
-                setMembershipError(
-                    getAuthErrorMessage(
-                        error,
-                        "Failed to join this team. Ask an owner/admin to add you.",
-                    ),
-                )
-                return
-            }
-
-            setMembershipSuccess(`You were added to ${selectedTeam?.name || "this team"}.`)
-            await loadTeamMembers(selectedTeamId)
-        } catch (err) {
-            setMembershipError(getAuthErrorMessage(err, "Failed to join this team."))
-        }
-    }
-
     if (loading || roleLoading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -501,6 +463,7 @@ export default function TeamsPage() {
     }
 
     return (
+        <>
         <div className="space-y-8">
             {/* Page header */}
             <div>
@@ -648,7 +611,7 @@ export default function TeamsPage() {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleDeleteTeam(team.id, team.name)}
+                                                    onClick={() => handleDeleteTeam(team.id, team.name)}
                                                     className="text-muted-foreground transition-colors hover:text-destructive"
                                                     aria-label="Delete team"
                                                     title="Delete team"
@@ -703,7 +666,9 @@ export default function TeamsPage() {
 
                 {!selectedTeam ? (
                     <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                        No team selected. Click a team above to manage its members.
+                        {teams.length === 0
+                            ? "No teams in this organization yet. Create your first team above."
+                            : "No team selected. Click a team above to manage its members."}
                     </div>
                 ) : (
                     <>
@@ -770,21 +735,10 @@ export default function TeamsPage() {
                                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
                             </div>
                         ) : selectedTeamLoadError ? (
-                            <div className="space-y-3 px-6 py-4">
+                            <div className="px-6 py-4">
                                 <p className="text-sm text-destructive">
                                     {selectedTeamLoadError.message}
                                 </p>
-                                {selectedTeamLoadError.code === TEAM_MEMBER_PERMISSION_ERROR &&
-                                    session?.user?.id && (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => void handleJoinSelectedTeam()}
-                                        >
-                                            Join Team to View Members
-                                        </Button>
-                                    )}
                             </div>
                         ) : selectedTeamMembers.length === 0 ? (
                             <div className="px-6 py-8 text-center text-sm text-muted-foreground">
@@ -815,22 +769,24 @@ export default function TeamsPage() {
                                                     {email} · {role} · added {formatJoinedDate(teamMember.createdAt)}
                                                 </p>
                                             </div>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() =>
-                                                    void handleRemoveMemberFromSelectedTeam(teamMember.userId)
-                                                }
-                                                disabled={removingMemberKey === removeActionKey}
-                                                className="shrink-0 text-muted-foreground hover:text-destructive"
-                                            >
-                                                {removingMemberKey === removeActionKey ? (
-                                                    <Loader2 className="size-4 animate-spin" />
-                                                ) : (
-                                                    <Trash2 className="size-4" />
-                                                )}
-                                            </Button>
+                                            {teamMember.userId !== session?.user?.id && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() =>
+                                                        void handleRemoveMemberFromSelectedTeam(teamMember.userId)
+                                                    }
+                                                    disabled={removingMemberKey === removeActionKey}
+                                                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                                                >
+                                                    {removingMemberKey === removeActionKey ? (
+                                                        <Loader2 className="size-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="size-4" />
+                                                    )}
+                                                </Button>
+                                            )}
                                         </div>
                                     )
                                 })}
@@ -840,5 +796,39 @@ export default function TeamsPage() {
                 )}
             </div>
         </div>
+
+        {/* Delete team confirmation dialog */}
+        <Dialog
+            open={deleteConfirm.open}
+            onOpenChange={(open) => setDeleteConfirm((prev) => ({ ...prev, open }))}
+        >
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete team</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to delete{" "}
+                        <span className="font-medium text-foreground">{deleteConfirm.teamName}</span>?
+                        This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setDeleteConfirm((prev) => ({ ...prev, open: false }))}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => void handleConfirmDelete()}
+                    >
+                        Delete
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        </>
     )
 }

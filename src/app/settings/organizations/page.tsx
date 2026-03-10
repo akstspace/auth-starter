@@ -6,9 +6,11 @@ import { motion, AnimatePresence } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Building2, Plus, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
 import { getAuthErrorMessage } from "@/lib/auth-error"
 import { generateSlug } from "@/lib/utils"
+import { setActiveOrganizationWithTeam } from "@/lib/organization-context"
 
 interface Organization {
     id: string
@@ -41,8 +43,11 @@ export default function OrganizationsPage() {
     const [editName, setEditName] = useState("")
     const [editSlug, setEditSlug] = useState("")
     const [error, setError] = useState("")
+    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; orgId: string; orgName: string }>({ open: false, orgId: "", orgName: "" })
+    const [deletingOrganizationId, setDeletingOrganizationId] = useState<string | null>(null)
+    const [deleteError, setDeleteError] = useState("")
 
-    const canManageOrg = isOrgManagerRole(activeMemberRole?.role)
+    const canManageActiveOrg = isOrgManagerRole(activeMemberRole?.role)
 
     const fetchOrgs = useCallback(async () => {
         try {
@@ -61,12 +66,8 @@ export default function OrganizationsPage() {
 
     useEffect(() => {
         if (roleLoading) return
-        if (!canManageOrg) {
-            setLoading(false)
-            return
-        }
         fetchOrgs()
-    }, [canManageOrg, fetchOrgs, roleLoading])
+    }, [fetchOrgs, roleLoading])
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -86,9 +87,7 @@ export default function OrganizationsPage() {
                 return
             }
             if (data) {
-                const { error: activeError } = await authClient.organization.setActive({
-                    organizationId: data.id,
-                })
+                const { error: activeError } = await setActiveOrganizationWithTeam(data.id)
                 if (activeError) {
                     setError(getAuthErrorMessage(activeError, "Failed to activate organization."))
                     return
@@ -120,21 +119,31 @@ export default function OrganizationsPage() {
         }
     }
 
-    const handleDelete = async (orgId: string) => {
-        if (!confirm("Are you sure? This will delete the organization and remove all members.")) return
+    const handleDelete = (orgId: string, orgName: string) => {
+        setDeleteError("")
+        setDeleteConfirm({ open: true, orgId, orgName })
+    }
+
+    const handleConfirmDelete = async () => {
+        const { orgId } = deleteConfirm
+        setDeletingOrganizationId(orgId)
+        setDeleteError("")
         try {
             const { error: err } = await authClient.organization.delete({ organizationId: orgId })
             if (err) {
-                setError(getAuthErrorMessage(err, "Failed to delete organization."))
+                setDeleteError(getAuthErrorMessage(err, "Failed to delete organization."))
                 return
             }
+            setDeleteConfirm({ open: false, orgId: "", orgName: "" })
             if (orgId === currentOrgId) {
                 router.push("/")
             } else {
                 fetchOrgs()
             }
         } catch (err) {
-            setError(getAuthErrorMessage(err, "Failed to delete organization."))
+            setDeleteError(getAuthErrorMessage(err, "Failed to delete organization."))
+        } finally {
+            setDeletingOrganizationId(null)
         }
     }
 
@@ -152,18 +161,8 @@ export default function OrganizationsPage() {
         )
     }
 
-    if (!canManageOrg) {
-        return (
-            <div className="rounded-xl border border-border/50 bg-card/30 p-6">
-                <h1 className="text-xl font-bold text-foreground">Organizations</h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    Only organization owners and admins can manage organization settings.
-                </p>
-            </div>
-        )
-    }
-
     return (
+        <>
         <div className="space-y-8">
             <div className="flex items-center justify-between">
                 <div>
@@ -252,14 +251,16 @@ export default function OrganizationsPage() {
                                         <p className="truncate text-xs text-muted-foreground">{org.slug} · {org.id.slice(0, 8)}…</p>
                                     </div>
                                 </div>
+                                {canManageActiveOrg && org.id === currentOrgId && (
                                 <div className="flex shrink-0 items-center gap-2">
                                     <button onClick={() => startEdit(org)} className="text-muted-foreground transition-colors hover:text-foreground" title="Edit" aria-label="Edit organization">
                                         <Pencil className="size-3.5" />
                                     </button>
-                                    <button onClick={() => handleDelete(org.id)} className="text-muted-foreground transition-colors hover:text-red-500" title="Delete" aria-label="Delete organization">
+                                    <button onClick={() => handleDelete(org.id, org.name)} disabled={deletingOrganizationId === org.id} className="text-muted-foreground transition-colors hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed" title="Delete" aria-label="Delete organization">
                                         <Trash2 className="size-3.5" />
                                     </button>
                                 </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -272,5 +273,26 @@ export default function OrganizationsPage() {
                 )}
             </div>
         </div>
+
+        <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm((s) => ({ ...s, open }))}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete Organization</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to delete <span className="font-medium text-foreground">{deleteConfirm.orgName}</span>? This will permanently remove the organization and all its members.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    {deleteError && <p className="mr-auto text-sm text-red-500">{deleteError}</p>}
+                    <Button variant="ghost" disabled={!!deletingOrganizationId} onClick={() => setDeleteConfirm({ open: false, orgId: "", orgName: "" })}>
+                        Cancel
+                    </Button>
+                    <Button variant="destructive" disabled={!!deletingOrganizationId} onClick={handleConfirmDelete}>
+                        {deletingOrganizationId ? <><Loader2 className="mr-1.5 size-3.5 animate-spin" />Deleting…</> : "Delete"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        </>
     )
 }
