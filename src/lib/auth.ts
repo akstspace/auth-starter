@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/db";
 import { member, team, teamMember } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { APIError } from "better-auth/api";
 import {
   jwt,
@@ -24,7 +24,8 @@ const isManagerRole = (role: string | undefined | null): boolean =>
 
 /**
  * Adds a single user to every team in the given organization.
- * Silently ignores duplicate-member errors.
+ * Uses a single query to fetch existing memberships and a bulk insert
+ * with ON CONFLICT DO NOTHING to avoid N+1 queries.
  */
 const addUserToAllOrgTeams = async (
   userId: string,
@@ -35,27 +36,37 @@ const addUserToAllOrgTeams = async (
     .from(team)
     .where(eq(team.organizationId, orgId));
 
-  for (const t of orgTeams) {
-    const alreadyMember = await db
-      .select({ id: teamMember.id })
-      .from(teamMember)
-      .where(and(eq(teamMember.teamId, t.id), eq(teamMember.userId, userId)))
-      .limit(1);
+  if (orgTeams.length === 0) return;
 
-    if (alreadyMember.length === 0) {
-      await db.insert(teamMember).values({
+  const teamIds = orgTeams.map((t) => t.id);
+
+  const existingMemberships = await db
+    .select({ teamId: teamMember.teamId })
+    .from(teamMember)
+    .where(and(eq(teamMember.userId, userId), inArray(teamMember.teamId, teamIds)));
+
+  const alreadyMemberTeamIds = new Set(existingMemberships.map((m) => m.teamId));
+  const teamsToJoin = teamIds.filter((id) => !alreadyMemberTeamIds.has(id));
+
+  if (teamsToJoin.length === 0) return;
+
+  await db
+    .insert(teamMember)
+    .values(
+      teamsToJoin.map((teamId) => ({
         id: crypto.randomUUID(),
-        teamId: t.id,
+        teamId,
         userId,
         createdAt: new Date(),
-      });
-    }
-  }
+      })),
+    )
+    .onConflictDoNothing();
 };
 
 /**
  * Adds all admin/owner members of an org to the given team.
- * Silently ignores users already in the team.
+ * Uses a single query to fetch existing memberships and a bulk insert
+ * with ON CONFLICT DO NOTHING to avoid N+1 queries.
  */
 const addAllOrgManagersToTeam = async (
   teamId: string,
@@ -66,24 +77,33 @@ const addAllOrgManagersToTeam = async (
     .from(member)
     .where(eq(member.organizationId, orgId));
 
-  for (const m of orgMembers) {
-    if (!isManagerRole(m.role)) continue;
+  const managerUserIds = orgMembers
+    .filter((m) => isManagerRole(m.role))
+    .map((m) => m.userId);
 
-    const alreadyMember = await db
-      .select({ id: teamMember.id })
-      .from(teamMember)
-      .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, m.userId)))
-      .limit(1);
+  if (managerUserIds.length === 0) return;
 
-    if (alreadyMember.length === 0) {
-      await db.insert(teamMember).values({
+  const existingMemberships = await db
+    .select({ userId: teamMember.userId })
+    .from(teamMember)
+    .where(and(eq(teamMember.teamId, teamId), inArray(teamMember.userId, managerUserIds)));
+
+  const alreadyMemberUserIds = new Set(existingMemberships.map((m) => m.userId));
+  const usersToAdd = managerUserIds.filter((id) => !alreadyMemberUserIds.has(id));
+
+  if (usersToAdd.length === 0) return;
+
+  await db
+    .insert(teamMember)
+    .values(
+      usersToAdd.map((userId) => ({
         id: crypto.randomUUID(),
         teamId,
-        userId: m.userId,
+        userId,
         createdAt: new Date(),
-      });
-    }
-  }
+      })),
+    )
+    .onConflictDoNothing();
 };
 
 export const auth = betterAuth({
