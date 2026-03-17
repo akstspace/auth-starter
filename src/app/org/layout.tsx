@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Lock, Settings, LogOut } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { OrgSwitcher } from "@/components/org-switcher"
+import { TeamSwitcher } from "@/components/team-switcher"
 import { LoginRequired } from "@/components/login-required"
 import { authClient } from "@/lib/auth-client"
 import { getAuthErrorMessage } from "@/lib/auth-error"
@@ -30,6 +31,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
                             </Link>
                             <span className="hidden text-border/60 sm:inline">/</span>
                             <OrgSwitcher />
+                            <TeamSwitcher />
                         </div>
                         <div className="flex items-center gap-3">
                             <Link

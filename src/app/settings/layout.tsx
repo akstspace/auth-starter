@@ -18,6 +18,7 @@ import { authClient } from "@/lib/auth-client"
 import { LoginRequired } from "@/components/login-required"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { OrgSwitcher } from "@/components/org-switcher"
+import { TeamSwitcher } from "@/components/team-switcher"
 import { getAuthErrorMessage } from "@/lib/auth-error"
 
 interface NavItem {
@@ -36,12 +37,12 @@ const isOrgManagerRole = (role: string | undefined) => {
 
 const ORG_NAV_ITEMS: NavItem[] = [
     { href: "/settings/members", label: "Members", icon: Users },
-    { href: "/settings/organizations", label: "Organizations", icon: Building2 },
     { href: "/settings/teams", label: "Teams", icon: UsersRound },
 ]
 
 const ACCOUNT_NAV_ITEMS: NavItem[] = [
     { href: "/settings/profile", label: "Profile", icon: User },
+    { href: "/settings/organizations", label: "Organizations", icon: Building2 },
     { href: "/settings/passkeys", label: "Passkeys", icon: Fingerprint },
     { href: "/settings/security", label: "Security", icon: Shield },
 ]
@@ -89,6 +90,7 @@ export default function OrgSettingsLayout({ children }: { children: React.ReactN
                             </Link>
                             <span className="hidden text-border/60 sm:inline">/</span>
                             <OrgSwitcher />
+                            <TeamSwitcher />
                         </div>
                         <div className="flex items-center gap-3">
                             <Link
