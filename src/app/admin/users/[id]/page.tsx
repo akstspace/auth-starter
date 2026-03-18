@@ -79,7 +79,6 @@ export default function AdminUserDetailPage() {
     const [error, setError] = useState("")
     const [user, setUser] = useState<AdminUserRecord | null>(null)
     const [sessions, setSessions] = useState<AdminSessionRecord[]>([])
-    const [sessionTokenMap, setSessionTokenMap] = useState<Record<string, string>>({})
     const [actionError, setActionError] = useState("")
     const [actionSuccess, setActionSuccess] = useState("")
     const [profileName, setProfileName] = useState("")
@@ -122,7 +121,6 @@ export default function AdminUserDetailPage() {
 
         setUser(resolvedUser)
         setSessions(result.data?.sessions ?? [])
-        setSessionTokenMap(result.data?.sessionTokenMap ?? {})
         setProfileName(resolvedUser?.name ?? "")
         setProfileEmail(resolvedUser?.email ?? "")
         setProfileImage(resolvedUser?.image ?? "")
@@ -331,27 +329,6 @@ export default function AdminUserDetailPage() {
                 }
                 await loadPage()
                 setActionSuccess("All sessions revoked.")
-            },
-        })
-    }
-
-    const requestRevokeSession = (sessionRecord: AdminSessionRecord) => {
-        setActionError("")
-        setActionSuccess("")
-        openConfirm({
-            title: "Revoke this session?",
-            description: "The selected device session will be invalidated immediately.",
-            actionLabel: "Revoke session",
-            onConfirm: async () => {
-                const result = await authClient.admin.revokeUserSession({
-                    sessionToken: sessionTokenMap[sessionRecord.id] ?? "",
-                })
-                if (result.error) {
-                    setActionError(formatAdminError(result.error, "Failed to revoke the session."))
-                    return
-                }
-                await loadPage()
-                setActionSuccess("Session revoked.")
             },
         })
     }
@@ -641,19 +618,16 @@ export default function AdminUserDetailPage() {
                                             <Table className="min-w-[880px]">
                                                 <TableHeader>
                                                     <TableRow>
-                                                        <TableHead>Token</TableHead>
                                                         <TableHead>Created</TableHead>
                                                         <TableHead>Expires</TableHead>
                                                         <TableHead>IP</TableHead>
                                                         <TableHead>User agent</TableHead>
                                                         <TableHead>State</TableHead>
-                                                        <TableHead className="text-right">Action</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {sessions.map((sessionRecord) => (
                                                         <TableRow key={sessionRecord.id}>
-                                                            <TableCell>{sessionRecord.tokenPrefix ?? "—"}</TableCell>
                                                             <TableCell className="tabular-nums text-muted-foreground">
                                                                 {formatDateTime(sessionRecord.createdAt)}
                                                             </TableCell>
@@ -673,16 +647,6 @@ export default function AdminUserDetailPage() {
                                                                     <AdminStatusBadge label="Standard" />
                                                                 )}
                                                             </TableCell>
-                                                            <TableCell className="text-right">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() => requestRevokeSession(sessionRecord)}
-                                                                    disabled={!sessionTokenMap[sessionRecord.id]}
-                                                                >
-                                                                    Revoke
-                                                                </Button>
-                                                            </TableCell>
                                                         </TableRow>
                                                     ))}
                                                 </TableBody>
@@ -694,7 +658,6 @@ export default function AdminUserDetailPage() {
                                         {sessions.map((sessionRecord) => (
                                             <div key={sessionRecord.id} className="rounded-xl border border-border/60 p-4">
                                                 <div className="flex flex-wrap gap-2">
-                                                    <AdminStatusBadge label={sessionRecord.tokenPrefix ?? "—"} />
                                                     {sessionRecord.impersonatedBy ? (
                                                         <AdminStatusBadge label="Impersonated" tone="warning" />
                                                     ) : null}
@@ -704,16 +667,6 @@ export default function AdminUserDetailPage() {
                                                     <p className="tabular-nums">Expires: {formatDateTime(sessionRecord.expiresAt)}</p>
                                                     <p>IP: {sessionRecord.ipAddress || "Unavailable"}</p>
                                                     <p className="text-pretty">User agent: {sessionRecord.userAgent || "Unavailable"}</p>
-                                                </div>
-                                                <div className="mt-3">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => requestRevokeSession(sessionRecord)}
-                                                        disabled={!sessionTokenMap[sessionRecord.id]}
-                                                    >
-                                                        Revoke session
-                                                    </Button>
                                                 </div>
                                             </div>
                                         ))}

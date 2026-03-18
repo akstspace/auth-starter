@@ -31,7 +31,6 @@ export interface AdminUserRecord {
 
 export interface AdminSessionRecord {
   id: string;
-  tokenPrefix?: string | null;
   expiresAt?: string | Date | null;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
@@ -41,10 +40,6 @@ export interface AdminSessionRecord {
   impersonatedBy?: string | null;
 }
 
-/** Server-only type – use only for endpoints that must access the raw token. */
-export interface AdminSessionWithToken extends AdminSessionRecord {
-  token: string | null;
-}
 
 export interface AdminUsersResponse {
   users: AdminUserRecord[];
@@ -118,15 +113,11 @@ const parseUser = (value: unknown): AdminUserRecord | null => {
   };
 };
 
-const parseSession = (value: unknown): AdminSessionWithToken | null => {
+const parseSession = (value: unknown): AdminSessionRecord | null => {
   if (!isRecord(value) || typeof value.id !== "string") return null;
-
-  const rawToken = typeof value.token === "string" ? value.token : null;
 
   return {
     id: value.id,
-    tokenPrefix: truncateToken(rawToken),
-    token: rawToken,
     expiresAt:
       typeof value.expiresAt === "string" || value.expiresAt instanceof Date
         ? value.expiresAt
@@ -165,11 +156,6 @@ export const formatDateTime = (value: string | Date | null | undefined) => {
   return date.toLocaleString();
 };
 
-export const truncateToken = (value: string | null | undefined) => {
-  if (!value) return "—";
-  if (value.length <= 12) return value;
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-};
 
 const resolveFilterQuery = (filterKey: AdminFilterKey) => {
   switch (filterKey) {
@@ -331,26 +317,17 @@ export const getAdminUserDetails = async (userId: string) => {
     }
 
     const sessionPayload = sessionsResult.data;
-    const parsed =
+    const sessions =
       isRecord(sessionPayload) && Array.isArray(sessionPayload.sessions)
         ? sessionPayload.sessions
             .map((value) => parseSession(value))
-            .filter((value): value is AdminSessionWithToken => Boolean(value))
+            .filter((value): value is AdminSessionRecord => Boolean(value))
         : [];
-
-    const sessionTokenMap: Record<string, string> = {};
-    const sessions: AdminSessionRecord[] = parsed.map(
-      ({ token, ...rest }) => {
-        if (token) sessionTokenMap[rest.id] = token;
-        return rest;
-      },
-    );
 
     return {
       data: {
         user: unwrapAdminUser(userResult.data),
         sessions,
-        sessionTokenMap,
       },
       error: sessionsResult.error
         ? formatAdminError(sessionsResult.error, "Failed to load sessions.")
