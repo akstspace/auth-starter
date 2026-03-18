@@ -31,7 +31,6 @@ import {
     formatAdminError,
     formatDateTime,
     getAdminUserDetails,
-    truncateToken,
     type AdminSessionRecord,
     type AdminUserRecord,
 } from "@/lib/admin-data"
@@ -80,6 +79,7 @@ export default function AdminUserDetailPage() {
     const [error, setError] = useState("")
     const [user, setUser] = useState<AdminUserRecord | null>(null)
     const [sessions, setSessions] = useState<AdminSessionRecord[]>([])
+    const [sessionTokenMap, setSessionTokenMap] = useState<Record<string, string>>({})
     const [actionError, setActionError] = useState("")
     const [actionSuccess, setActionSuccess] = useState("")
     const [profileName, setProfileName] = useState("")
@@ -122,6 +122,7 @@ export default function AdminUserDetailPage() {
 
         setUser(resolvedUser)
         setSessions(result.data?.sessions ?? [])
+        setSessionTokenMap(result.data?.sessionTokenMap ?? {})
         setProfileName(resolvedUser?.name ?? "")
         setProfileEmail(resolvedUser?.email ?? "")
         setProfileImage(resolvedUser?.image ?? "")
@@ -343,7 +344,7 @@ export default function AdminUserDetailPage() {
             actionLabel: "Revoke session",
             onConfirm: async () => {
                 const result = await authClient.admin.revokeUserSession({
-                    sessionToken: sessionRecord.token ?? "",
+                    sessionToken: sessionTokenMap[sessionRecord.id] ?? "",
                 })
                 if (result.error) {
                     setActionError(formatAdminError(result.error, "Failed to revoke the session."))
@@ -652,7 +653,7 @@ export default function AdminUserDetailPage() {
                                                 <TableBody>
                                                     {sessions.map((sessionRecord) => (
                                                         <TableRow key={sessionRecord.id}>
-                                                            <TableCell>{truncateToken(sessionRecord.token)}</TableCell>
+                                                            <TableCell>{sessionRecord.tokenPrefix ?? "—"}</TableCell>
                                                             <TableCell className="tabular-nums text-muted-foreground">
                                                                 {formatDateTime(sessionRecord.createdAt)}
                                                             </TableCell>
@@ -677,7 +678,7 @@ export default function AdminUserDetailPage() {
                                                                     variant="outline"
                                                                     size="sm"
                                                                     onClick={() => requestRevokeSession(sessionRecord)}
-                                                                    disabled={!sessionRecord.token}
+                                                                    disabled={!sessionTokenMap[sessionRecord.id]}
                                                                 >
                                                                     Revoke
                                                                 </Button>
@@ -693,7 +694,7 @@ export default function AdminUserDetailPage() {
                                         {sessions.map((sessionRecord) => (
                                             <div key={sessionRecord.id} className="rounded-xl border border-border/60 p-4">
                                                 <div className="flex flex-wrap gap-2">
-                                                    <AdminStatusBadge label={truncateToken(sessionRecord.token)} />
+                                                    <AdminStatusBadge label={sessionRecord.tokenPrefix ?? "—"} />
                                                     {sessionRecord.impersonatedBy ? (
                                                         <AdminStatusBadge label="Impersonated" tone="warning" />
                                                     ) : null}
@@ -709,7 +710,7 @@ export default function AdminUserDetailPage() {
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={() => requestRevokeSession(sessionRecord)}
-                                                        disabled={!sessionRecord.token}
+                                                        disabled={!sessionTokenMap[sessionRecord.id]}
                                                     >
                                                         Revoke session
                                                     </Button>

@@ -31,7 +31,7 @@ export interface AdminUserRecord {
 
 export interface AdminSessionRecord {
   id: string;
-  token?: string | null;
+  tokenPrefix?: string | null;
   expiresAt?: string | Date | null;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
@@ -39,6 +39,11 @@ export interface AdminSessionRecord {
   userAgent?: string | null;
   userId?: string | null;
   impersonatedBy?: string | null;
+}
+
+/** Server-only type – use only for endpoints that must access the raw token. */
+export interface AdminSessionWithToken extends AdminSessionRecord {
+  token: string | null;
 }
 
 export interface AdminUsersResponse {
@@ -113,12 +118,15 @@ const parseUser = (value: unknown): AdminUserRecord | null => {
   };
 };
 
-const parseSession = (value: unknown): AdminSessionRecord | null => {
+const parseSession = (value: unknown): AdminSessionWithToken | null => {
   if (!isRecord(value) || typeof value.id !== "string") return null;
+
+  const rawToken = typeof value.token === "string" ? value.token : null;
 
   return {
     id: value.id,
-    token: typeof value.token === "string" ? value.token : null,
+    tokenPrefix: truncateToken(rawToken),
+    token: rawToken,
     expiresAt:
       typeof value.expiresAt === "string" || value.expiresAt instanceof Date
         ? value.expiresAt
@@ -323,17 +331,26 @@ export const getAdminUserDetails = async (userId: string) => {
     }
 
     const sessionPayload = sessionsResult.data;
-    const sessions =
+    const parsed =
       isRecord(sessionPayload) && Array.isArray(sessionPayload.sessions)
         ? sessionPayload.sessions
             .map((value) => parseSession(value))
-            .filter((value): value is AdminSessionRecord => Boolean(value))
+            .filter((value): value is AdminSessionWithToken => Boolean(value))
         : [];
+
+    const sessionTokenMap: Record<string, string> = {};
+    const sessions: AdminSessionRecord[] = parsed.map(
+      ({ token, ...rest }) => {
+        if (token) sessionTokenMap[rest.id] = token;
+        return rest;
+      },
+    );
 
     return {
       data: {
         user: unwrapAdminUser(userResult.data),
         sessions,
+        sessionTokenMap,
       },
       error: sessionsResult.error
         ? formatAdminError(sessionsResult.error, "Failed to load sessions.")
