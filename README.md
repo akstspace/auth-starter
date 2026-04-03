@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Archived.** This auth starter template is no longer maintained. Replaced by [auth-provider](https://github.com/akstspace/auth-provider).
+> 
 # Auth UI Boilerplate
 
 Next.js + **Better Auth** + **Drizzle ORM** + **JWT/JWKS** backend integration. Includes Google OAuth, email/password auth, API proxy with automatic JWT injection, and integration guides for Go, Python, and Express.
